@@ -42,14 +42,14 @@
       margin-top: -160px;
       transform-style: preserve-3d;
       transition: transform 0.2s ease;
-      animation: idleFloat 4s ease-in-out infinite;
       z-index: 2;
     }
     .character img {
       width: 100%;
       filter: drop-shadow(0 15px 20px rgba(0,0,0,0.8));
-      position: relative;
-      z-index: 2;
+      animation: necroPose 8s ease-in-out infinite,
+                 necroGesture 4s ease-in-out infinite;
+      transform-origin: center bottom;
     }
 
     /* Aura tubuh */
@@ -97,7 +97,8 @@
     }
 
     /* Senjata glow */
-    .weapon-glow {
+    .weapon-glow,
+    .weapon-particles {
       position: absolute;
       top: 40px;
       right: -20px;
@@ -106,22 +107,28 @@
       border-radius: 50%;
       background: radial-gradient(circle, rgba(180,0,255,0.7), transparent 80%);
       filter: blur(30px);
-      animation: weaponPulse 2s infinite;
+      animation: weaponCast 3s ease-in-out infinite;
       z-index: 0;
     }
 
-    /* Senjata partikel */
     .weapon-particles {
-      position: absolute;
-      top: 20px;
-      right: -10px;
       width: 120px;
       height: 120px;
       background: radial-gradient(circle, rgba(220,100,255,0.6), transparent 70%);
-      border-radius: 50%;
       filter: blur(20px);
-      animation: weaponFloat 3s infinite ease-in-out;
       mix-blend-mode: screen;
+    }
+
+    /* Beam energi */
+    .energy-beam {
+      position: absolute;
+      top: 60px;
+      right: -10px;
+      width: 6px;
+      height: 220px;
+      background: linear-gradient(to top, rgba(200,0,255,0.8), transparent);
+      filter: blur(6px);
+      animation: energyFlow 2s linear infinite;
       z-index: 0;
     }
 
@@ -137,13 +144,23 @@
       z-index: 1;
     }
 
-    /* Tengkorak individual */
     .skull {
       position: absolute;
       font-size: 32px;
       opacity: 0.7;
       filter: drop-shadow(0 0 8px rgba(200,0,255,0.8));
       animation: floatSkull linear forwards;
+    }
+
+    /* Lightning zigzag */
+    .energy-zigzag {
+      position: absolute;
+      height: 2px;
+      background: rgba(200,0,255,0.9);
+      filter: blur(4px);
+      transform-origin: left center;
+      opacity: 0;
+      animation: zigzagFade 0.8s ease-out forwards;
     }
 
     /* Text */
@@ -160,20 +177,22 @@
       from { transform: translateX(-50%) rotate(0deg); }
       to { transform: translateX(-50%) rotate(360deg); }
     }
-    @keyframes weaponPulse {
-      0%   { transform: scale(0.9); opacity: 0.6; }
-      50%  { transform: scale(1.2); opacity: 1; }
-      100% { transform: scale(0.9); opacity: 0.6; }
+    @keyframes weaponCast {
+      0%   { transform: rotate(-5deg) translateY(0) scale(0.9); opacity: 0.8; }
+      50%  { transform: rotate(5deg) translateY(-15px) scale(1.1); opacity: 1; }
+      100% { transform: rotate(-5deg) translateY(0) scale(0.9); opacity: 0.8; }
     }
-    @keyframes weaponFloat {
-      0%   { transform: translateY(0px) scale(0.8); opacity: 0.7; }
-      50%  { transform: translateY(-20px) scale(1); opacity: 1; }
-      100% { transform: translateY(0px) scale(0.8); opacity: 0.7; }
+    @keyframes necroPose {
+      0%   { transform: rotateZ(0deg) scale(1); }
+      25%  { transform: rotateZ(-2deg) scale(1.02); }
+      50%  { transform: rotateZ(3deg) scale(1.03); }
+      75%  { transform: rotateZ(-1deg) scale(1.01); }
+      100% { transform: rotateZ(0deg) scale(1); }
     }
-    @keyframes idleFloat {
-      0%   { transform: translateY(0px); }
-      50%  { transform: translateY(-15px); }
-      100% { transform: translateY(0px); }
+    @keyframes necroGesture {
+      0%   { transform: skewX(0deg); }
+      50%  { transform: skewX(2deg); }
+      100% { transform: skewX(0deg); }
     }
     @keyframes floatSkull {
       0%   { transform: translateY(0px) scale(0.5); opacity: 0; }
@@ -181,13 +200,24 @@
       80%  { opacity: 1; }
       100% { transform: translateY(-200px) scale(1); opacity: 0; }
     }
+    @keyframes energyFlow {
+      0%   { opacity: 0; transform: translateY(100px) scaleY(0.5); }
+      30%  { opacity: 1; }
+      70%  { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-220px) scaleY(1.2); }
+    }
+    @keyframes zigzagFade {
+      0%   { opacity: 1; }
+      50%  { opacity: 1; }
+      100% { opacity: 0; }
+    }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="platform"></div>
     <div class="character" id="necromancer">
-      <img src="necromancer.png" alt="Necromancer Male">
+      <img src="necromancer.png" alt="Necromancer">
 
       <!-- Aura tubuh -->
       <div class="aura-shadow"></div>
@@ -196,6 +226,9 @@
       <!-- Efek senjata -->
       <div class="weapon-glow"></div>
       <div class="weapon-particles"></div>
+
+      <!-- Beam energi -->
+      <div class="energy-beam"></div>
     </div>
 
     <!-- Container skull -->
@@ -205,9 +238,19 @@
     <div class="tag">Male</div>
   </div>
 
+  <!-- Audio -->
+  <audio id="bgm" src="sounds/dark_ambient.mp3" preload="auto" loop></audio>
+  <audio id="sfx-lightning" src="sounds/lightning.mp3" preload="auto"></audio>
+  <audio id="sfx-whisper" src="sounds/whisper.mp3" preload="auto"></audio>
+
   <script>
-    // Tilt interaktif
     const char = document.getElementById('necromancer');
+    const skullsContainer = document.getElementById('skulls');
+    const bgm = document.getElementById("bgm");
+    const sfxLightning = document.getElementById("sfx-lightning");
+    const sfxWhisper = document.getElementById("sfx-whisper");
+
+    // Tilt interaktif
     document.addEventListener('mousemove', (e) => {
       const x = (e.clientX / window.innerWidth - 0.5) * 20;
       const y = (e.clientY / window.innerHeight - 0.5) * -20;
@@ -217,15 +260,60 @@
       char.style.transform = "rotateX(0) rotateY(0)";
     });
 
-    // Skull generator
-    const skullsContainer = document.getElementById('skulls');
+    // Play BGM
+    function initBGM() {
+      bgm.volume = 0.3;
+      bgm.play().catch(() => {
+        document.body.addEventListener("click", () => {
+          bgm.play();
+        }, { once: true });
+      });
+    }
+    window.addEventListener("load", initBGM);
+
+    function playSound(sound, volume = 1) {
+      const clone = sound.cloneNode();
+      clone.volume = volume;
+      clone.play();
+    }
+
+    function spawnLightning(weaponX, weaponY, targetX, targetY) {
+      const segments = 6;
+      let x1 = weaponX;
+      let y1 = weaponY;
+
+      for (let i = 1; i <= segments; i++) {
+        const t = i / segments;
+        const x2 = weaponX + (targetX - weaponX) * t + (Math.random() * 30 - 15);
+        const y2 = weaponY + (targetY - weaponY) * t + (Math.random() * 30 - 15);
+
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+        const segment = document.createElement('div');
+        segment.className = 'energy-zigzag';
+        segment.style.width = `${dist}px`;
+        segment.style.left = `${x1}px`;
+        segment.style.top = `${y1}px`;
+        segment.style.transform = `rotate(${angle}deg)`;
+
+        document.body.appendChild(segment);
+        setTimeout(() => segment.remove(), 800);
+
+        x1 = x2;
+        y1 = y2;
+      }
+    }
+
     function spawnSkull() {
       const skull = document.createElement('div');
       skull.className = 'skull';
-      skull.innerText = '☠️'; // Bisa diganti PNG skull
-      const size = Math.random() * 24 + 24; // 24–48px
+      skull.innerText = '☠️';
+      const size = Math.random() * 24 + 24;
       const left = Math.random() * window.innerWidth;
-      const duration = Math.random() * 3 + 4; // 4–7s
+      const duration = Math.random() * 3 + 4;
       skull.style.left = `${left}px`;
       skull.style.bottom = `0px`;
       skull.style.fontSize = `${size}px`;
@@ -233,13 +321,24 @@
 
       skullsContainer.appendChild(skull);
 
-      setTimeout(() => {
-        skull.remove();
-      }, duration * 1000);
+      const weaponX = window.innerWidth / 2 + 60;
+      const weaponY = window.innerHeight / 2 - 40;
+
+      const branchCount = Math.floor(Math.random() * 2) + 2;
+      for (let i = 0; i < branchCount; i++) {
+        const skullRect = skull.getBoundingClientRect();
+        const skullX = skullRect.left + skullRect.width / 2 + (Math.random() * 40 - 20);
+        const skullY = skullRect.top + skullRect.height / 2 + (Math.random() * 40 - 20);
+        spawnLightning(weaponX, weaponY, skullX, skullY);
+      }
+
+      playSound(sfxLightning, 0.7);
+      setTimeout(() => playSound(sfxWhisper, 0.4), 500);
+
+      setTimeout(() => skull.remove(), duration * 1000);
     }
 
-    // Spawn skull tiap 700ms
-    setInterval(spawnSkull, 700);
+    setInterval(spawnSkull, 1500);
   </script>
 </body>
 </html>
