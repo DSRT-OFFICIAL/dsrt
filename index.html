@@ -3,91 +3,207 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Glaze Color Preview</title>
+<title>Glaze Final Interactive Palette</title>
 <style>
-  body { font-family: sans-serif; background: #f0f0f0; margin:0; padding:0; }
-  h1 { text-align:center; margin:20px 0; }
-  #colorGrid { display: grid; grid-template-columns: repeat(auto-fill,minmax(60px,1fr)); gap:5px; padding:10px; }
-  .colorBox { width: 100%; padding-top: 100%; position: relative; cursor: pointer; border-radius:4px; border:1px solid #ccc; transition: transform 0.2s; }
-  .colorBox:hover { transform: scale(1.1); }
-  .colorBox span { position:absolute; bottom:2px; left:2px; font-size:10px; color:#000; background:rgba(255,255,255,0.6); padding:1px 3px; border-radius:2px; }
-  
-  #info { position:fixed; bottom:0; left:0; width:100%; background:#fff; padding:10px; border-top:1px solid #ccc; font-family:monospace; text-align:center; }
-
-  /* Popup overlay */
-  #popupOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; }
-  #popupContent { background:#fff; padding:20px; border-radius:8px; text-align:center; max-width:300px; width:80%; }
-  #popupColor { width:100%; height:150px; border-radius:6px; margin-bottom:15px; }
-  #closePopup { margin-top:10px; padding:5px 10px; cursor:pointer; background:#333; color:#fff; border:none; border-radius:4px; }
+  body { font-family: Arial, sans-serif; padding: 20px; transition: background 0.3s; }
+  h2 { margin-top: 30px; }
+  .color-box {
+    width: 60px; height: 60px; margin: 5px;
+    display: inline-block; border-radius: 8px; border: 1px solid #ccc;
+    cursor: pointer; transition: all 0.2s ease;
+  }
+  #preview { width: 120px; height: 120px; margin: 10px 0; border: 2px solid #000; border-radius: 8px; }
+  .palette-row { display: flex; flex-wrap: wrap; margin-bottom: 20px; }
+  .preset-box {
+    display: inline-flex; flex-wrap: wrap; margin: 5px; padding: 5px; border: 1px dashed #333;
+    border-radius: 8px; min-width: 150px; min-height: 50px; position: relative;
+  }
+  .preset-color {
+    width: 30px; height: 30px; margin: 2px; border-radius: 4px; cursor: pointer;
+  }
+  .delete-btn {
+    position: absolute; top: -8px; right: -8px; background: #f00; color: #fff;
+    border: none; border-radius: 50%; width: 18px; height: 18px; cursor: pointer; font-size: 12px;
+  }
+  button { margin: 5px; }
 </style>
 </head>
 <body>
 
-<h1>Glaze Color Preview</h1>
-<div id="colorGrid"></div>
-<div id="info">Tap a color box to see details...</div>
+<h1>Glaze Final Interactive Palette Demo</h1>
 
-<!-- Popup -->
-<div id="popupOverlay">
-  <div id="popupContent">
-    <div id="popupColor"></div>
-    <div id="popupInfo"></div>
-    <button id="closePopup">Close</button>
-  </div>
-</div>
+<label for="base-color">Base Color:</label>
+<input type="color" id="base-color" value="#3B82F6">
+
+<label for="shade">Shade:</label>
+<input type="number" id="shade" value="500" min="50" max="900" step="50">
+
+<label for="theme-mode">Theme:</label>
+<select id="theme-mode">
+  <option value="light">Light</option>
+  <option value="dark">Dark</option>
+</select>
+
+<button id="update-btn">Update Palette</button>
+<button id="reset-btn">Reset Base Color</button>
+
+<h2>Preview:</h2>
+<div id="preview"></div>
+
+<h2>Shades & Tints:</h2>
+<div id="shades-container" class="palette-row"></div>
+
+<h2>Complementary Palette:</h2>
+<div id="complementary-container" class="palette-row"></div>
+
+<h2>Analogous Palette:</h2>
+<div id="analogous-container" class="palette-row"></div>
+
+<h2>Triadic Palette:</h2>
+<div id="triadic-container" class="palette-row"></div>
+
+<h2>Saved Presets:</h2>
+<div id="preset-container" class="palette-row"></div>
+
+<button id="copy-css-btn">Copy CSS Variables</button>
+<button id="download-json-btn">Download Palette JSON</button>
 
 <script type="module">
-import { BasicColors } from './BasicGlazeColor.js';
-import { ExtendedColors } from './ExtendedGlazeColors.js';
-import { CustomColors } from './CustomColors.js';
+import { generateShades, generateTints, generateComplementary, generateAnalogous, generateTriadic } from "../Colors/PaletteUtils.js";
+import { getColor } from "../Colors/ColorsAlias.js";
+import { themeToCSSVars, themeSwitch, LightTheme, DarkTheme } from "../Colors/ColorsTheme.js";
 
-const AllColors = { ...BasicColors, ...ExtendedColors, ...CustomColors };
+const baseColorInput = document.getElementById("base-color");
+const shadeInput = document.getElementById("shade");
+const themeSelect = document.getElementById("theme-mode");
+const updateBtn = document.getElementById("update-btn");
+const resetBtn = document.getElementById("reset-btn");
 
-function toHex(c) {
-    const r = Math.round(c.r * 255).toString(16).padStart(2,'0');
-    const g = Math.round(c.g * 255).toString(16).padStart(2,'0');
-    const b = Math.round(c.b * 255).toString(16).padStart(2,'0');
-    return `#${r}${g}${b}`;
-}
+const preview = document.getElementById("preview");
+const shadesContainer = document.getElementById("shades-container");
+const complementaryContainer = document.getElementById("complementary-container");
+const analogousContainer = document.getElementById("analogous-container");
+const triadicContainer = document.getElementById("triadic-container");
+const presetContainer = document.getElementById("preset-container");
 
-function toRGB(c) {
-    const r = Math.round(c.r*255);
-    const g = Math.round(c.g*255);
-    const b = Math.round(c.b*255);
-    return `rgb(${r},${g},${b})`;
-}
+const copyCSSBtn = document.getElementById("copy-css-btn");
+const downloadJSONBtn = document.getElementById("download-json-btn");
 
-const grid = document.getElementById('colorGrid');
-const info = document.getElementById('info');
+let currentPalette = {};
+let savedPresets = JSON.parse(localStorage.getItem("glazePresets") || "[]");
 
-const popupOverlay = document.getElementById('popupOverlay');
-const popupColor = document.getElementById('popupColor');
-const popupInfo = document.getElementById('popupInfo');
-const closePopup = document.getElementById('closePopup');
+// ---- Helper Functions ----
+function createColorBox(hex, container, draggable=false) {
+  const div = document.createElement("div");
+  div.className = draggable ? "preset-color" : "color-box";
+  div.style.backgroundColor = hex;
+  div.title = hex;
 
-for (const key in AllColors) {
-    const color = AllColors[key];
-    const box = document.createElement('div');
-    box.className = 'colorBox';
-    box.style.backgroundColor = toHex(color);
-    const label = document.createElement('span');
-    label.textContent = key;
-    box.appendChild(label);
-    
-    box.addEventListener('click', () => {
-        // Update footer
-        info.textContent = `${key}: ${toHex(color)} | ${toRGB(color)}`;
-        // Show popup
-        popupColor.style.backgroundColor = toHex(color);
-        popupInfo.textContent = `${key}: ${toHex(color)} | ${toRGB(color)}`;
-        popupOverlay.style.display = 'flex';
+  // Click to preview
+  div.addEventListener("click", () => {
+    const newHex = prompt("Change color HEX:", hex) || hex;
+    div.style.backgroundColor = newHex;
+    preview.style.backgroundColor = newHex;
+    currentPalette.base = newHex;
+  });
+
+  // Drag/drop for preset
+  if (draggable) {
+    div.draggable = true;
+    div.addEventListener("dragstart", e => {
+      e.dataTransfer.setData("text/plain", hex);
     });
-    grid.appendChild(box);
+  } else {
+    div.addEventListener("dragstart", e => e.preventDefault());
+  }
+
+  container.appendChild(div);
 }
 
-closePopup.addEventListener('click', () => {
-    popupOverlay.style.display = 'none';
+function renderPalette(palette, container) {
+  container.innerHTML = "";
+  palette.forEach(hex => createColorBox(hex, container));
+}
+
+function renderPresets() {
+  presetContainer.innerHTML = "";
+  savedPresets.forEach((preset, idx) => {
+    const box = document.createElement("div");
+    box.className = "preset-box";
+
+    preset.forEach(hex => createColorBox(hex, box, true));
+
+    // Delete preset button
+    const delBtn = document.createElement("button");
+    delBtn.className = "delete-btn";
+    delBtn.textContent = "×";
+    delBtn.addEventListener("click", () => {
+      savedPresets.splice(idx,1);
+      localStorage.setItem("glazePresets", JSON.stringify(savedPresets));
+      renderPresets();
+    });
+    box.appendChild(delBtn);
+
+    presetContainer.appendChild(box);
+  });
+}
+
+// ---- Main Palette Update ----
+function updatePalette() {
+  let baseHex = baseColorInput.value;
+  const shadeValue = parseInt(shadeInput.value);
+  const themeMode = themeSelect.value;
+
+  try { baseHex = getColor("primary", shadeValue); } catch(e) {}
+
+  const theme = themeMode === "light" ? themeSwitch(LightTheme, "light") : themeSwitch(DarkTheme, "dark");
+  document.body.style.backgroundColor = themeMode === "light" ? "#f4f4f4" : "#333";
+
+  preview.style.backgroundColor = baseHex;
+
+  const shades = generateShades(baseHex, 5);
+  const tints = generateTints(baseHex, 5);
+  renderPalette([...shades, ...tints], shadesContainer);
+
+  renderPalette(generateComplementary(baseHex), complementaryContainer);
+  renderPalette(generateAnalogous(baseHex,30), analogousContainer);
+  renderPalette(generateTriadic(baseHex), triadicContainer);
+
+  currentPalette = { base: baseHex, shades, tints,
+                     complementary: generateComplementary(baseHex),
+                     analogous: generateAnalogous(baseHex,30),
+                     triadic: generateTriadic(baseHex) };
+
+  // Save preset automatically
+  savedPresets.push([...shades, ...tints]);
+  localStorage.setItem("glazePresets", JSON.stringify(savedPresets));
+  renderPresets();
+}
+
+updateBtn.addEventListener("click", updatePalette);
+
+resetBtn.addEventListener("click", () => {
+  baseColorInput.value = "#3B82F6";
+  shadeInput.value = "500";
+  updatePalette();
 });
+
+// Copy CSS
+copyCSSBtn.addEventListener("click", () => {
+  const cssText = themeToCSSVars({ custom: currentPalette }, "light");
+  navigator.clipboard.writeText(cssText).then(()=>alert("CSS Variables copied!"));
+});
+
+// Download JSON
+downloadJSONBtn.addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(currentPalette, null, 2)], { type: "application/json" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "palette.json";
+  link.click();
+});
+
+updatePalette();
 </script>
 
 </body>
