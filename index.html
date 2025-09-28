@@ -1,181 +1,364 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <title>3D Cube with Orbit Controls</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WebGL2 — Phong + Texture (Example)</title>
   <style>
-    body { margin: 0; background: black; }
-    canvas { width: 100vw; height: 100vh; display: block; cursor: grab; }
+    body { margin:0; background:#111; display:flex; height:100vh; align-items:center; justify-content:center; }
+    canvas { width:800px; height:600px; border:1px solid #333; background:#222; }
+    #ui { position:fixed; left:12px; top:12px; color:#ddd; font-family:monospace; font-size:13px; }
   </style>
 </head>
 <body>
-<canvas id="glcanvas"></canvas>
-<script>
-function createShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  return shader;
-}
-function createProgram(gl, vsSource, fsSource) {
-  const vs = createShader(gl, gl.VERTEX_SHADER, vsSource);
-  const fs = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
-  const program = gl.createProgram();
-  gl.attachShader(program, vs);
-  gl.attachShader(program, fs);
-  gl.linkProgram(program);
-  return program;
-}
+  <div id="ui">Drag to orbit • Mouse wheel to zoom</div>
+  <canvas id="c" width="800" height="600"></canvas>
 
-const canvas = document.getElementById("glcanvas");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-const gl = canvas.getContext("webgl");
+  <!-- gl-matrix untuk matriks/vectors -->
+  <script src="https://cdn.jsdelivr.net/npm/gl-matrix@3.5.0/gl-matrix-min.js"></script>
+
+<script type="module">
+const { mat4, vec3 } = glMatrix;
+
+// --- WebGL2 init ---
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2');
+if (!gl) { alert('WebGL2 tidak tersedia di browser ini.'); throw new Error('No WebGL2'); }
 gl.enable(gl.DEPTH_TEST);
+gl.enable(gl.CULL_FACE);
 
-// Shaders
-const vsSource = `
-  attribute vec3 aPosition;
-  uniform mat4 uModel;
-  uniform mat4 uView;
-  uniform mat4 uProjection;
-  void main() {
-    gl_Position = uProjection * uView * uModel * vec4(aPosition, 1.0);
-  }
+// --- shaders (WebGL2 / GLSL ES 3.00) ---
+const vsSource = `#version 300 es
+precision highp float;
+layout(location=0) in vec3 a_position;
+layout(location=1) in vec3 a_normal;
+layout(location=2) in vec2 a_uv;
+
+uniform mat4 uModel;
+uniform mat4 uView;
+uniform mat4 uProj;
+uniform mat3 uNormalMat;
+
+out vec3 vNormal;
+out vec3 vWorldPos;
+out vec2 vUv;
+
+void main() {
+  vec4 worldPos = uModel * vec4(a_position, 1.0);
+  vWorldPos = worldPos.xyz;
+  vNormal = normalize(uNormalMat * a_normal);
+  vUv = a_uv;
+  gl_Position = uProj * uView * worldPos;
+}
 `;
-const fsSource = `
-  precision mediump float;
-  uniform vec3 uColor;
-  void main() {
-    gl_FragColor = vec4(uColor, 1.0);
+
+const fsSource = `#version 300 es
+precision highp float;
+
+in vec3 vNormal;
+in vec3 vWorldPos;
+in vec2 vUv;
+
+out vec4 outColor;
+
+uniform vec3 uLightPos;
+uniform vec3 uViewPos;
+
+uniform vec3 uAmbientColor;
+uniform vec3 uSpecularColor;
+uniform float uShininess;
+uniform sampler2D uAlbedoMap;
+uniform float uUseTexture; // 1.0 yes, 0.0 no
+uniform vec3 uBaseColor;
+
+void main() {
+  // material color
+  vec3 albedo = uBaseColor;
+  if (uUseTexture > 0.5) {
+    albedo *= texture(uAlbedoMap, vUv).rgb;
   }
+
+  // ambient
+  vec3 ambient = 0.1 * uAmbientColor * albedo;
+
+  // diffuse
+  vec3 N = normalize(vNormal);
+  vec3 L = normalize(uLightPos - vWorldPos);
+  float NdotL = max(dot(N, L), 0.0);
+  vec3 diffuse = NdotL * albedo;
+
+  // specular (Blinn-Phong)
+  vec3 V = normalize(uViewPos - vWorldPos);
+  vec3 H = normalize(L + V);
+  float NdotH = max(dot(N, H), 0.0);
+  float spec = pow(NdotH, uShininess);
+  vec3 specular = spec * uSpecularColor;
+
+  vec3 color = ambient + diffuse + specular;
+
+  outColor = vec4(color, 1.0);
+}
 `;
-const program = createProgram(gl, vsSource, fsSource);
+
+// --- helpers compile/link ---
+function compileShader(src, type) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(s);
+    console.error('Shader compile error:', log);
+    throw new Error(log);
+  }
+  return s;
+}
+function createProgram(vsSrc, fsSrc) {
+  const vs = compileShader(vsSrc, gl.VERTEX_SHADER);
+  const fs = compileShader(fsSrc, gl.FRAGMENT_SHADER);
+  const p = gl.createProgram();
+  gl.attachShader(p, vs);
+  gl.attachShader(p, fs);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    const log = gl.getProgramInfoLog(p);
+    console.error('Program link error:', log);
+    throw new Error(log);
+  }
+  return p;
+}
+
+const program = createProgram(vsSource, fsSource);
 gl.useProgram(program);
 
-// Cube vertices + indices
-const vertices = new Float32Array([
-  -0.5,-0.5, 0.5,  0.5,-0.5, 0.5,  0.5, 0.5, 0.5, -0.5, 0.5, 0.5,
-  -0.5,-0.5,-0.5,  0.5,-0.5,-0.5,  0.5, 0.5,-0.5, -0.5, 0.5,-0.5,
-]);
-const indices = new Uint16Array([
-  0,1,2, 2,3,0,
-  4,5,6, 6,7,4,
-  0,4,7, 7,3,0,
-  1,5,6, 6,2,1,
-  3,2,6, 6,7,3,
-  0,1,5, 5,4,0
-]);
+// --- cube geometry (positions, normals, uvs, indices) ---
+const cube = createCube(); // returns buffers + counts
 
-// Buffers
-const vbo = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-const ibo = gl.createBuffer();
-gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-
-const aPosition = gl.getAttribLocation(program, "aPosition");
-gl.enableVertexAttribArray(aPosition);
-gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, 0, 0);
-
-const uModel = gl.getUniformLocation(program, "uModel");
-const uView = gl.getUniformLocation(program, "uView");
-const uProjection = gl.getUniformLocation(program, "uProjection");
-const uColor = gl.getUniformLocation(program, "uColor");
-
-// Matrix utils
-function perspective(fov, aspect, near, far) {
-  const f = 1.0 / Math.tan(fov / 2);
-  return new Float32Array([
-    f/aspect,0,0,0,
-    0,f,0,0,
-    0,0,(far+near)/(near-far),-1,
-    0,0,(2*far*near)/(near-far),0
-  ]);
-}
-function identity(){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);}
-function multiply(a,b){const o=new Float32Array(16);for(let i=0;i<4;i++){for(let j=0;j<4;j++){o[j*4+i]=a[i]*b[j*4]+a[i+4]*b[j*4+1]+a[i+8]*b[j*4+2]+a[i+12]*b[j*4+3];}}return o;}
-function translate(x,y,z){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1]);}
-function rotateY(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,s,0,0,1,0,0,-s,0,c,0,0,0,0,1]);}
-function rotateX(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([1,0,0,0,0,c,-s,0,0,s,c,0,0,0,0,1]);}
-
-// Projection
-const projection = perspective(Math.PI/4, canvas.width/canvas.height, 0.1, 100);
-
-// Orbit camera state
-let camAngleX = 0.8, camAngleY = 0.8, camDistance = 3;
-let dragging = false, lastX=0, lastY=0;
-
-canvas.addEventListener("mousedown", e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;});
-canvas.addEventListener("mouseup", ()=>dragging=false);
-canvas.addEventListener("mousemove", e=>{
-  if(dragging){
-    camAngleY += (e.clientX-lastX)*0.01;
-    camAngleX += (e.clientY-lastY)*0.01;
-    lastX=e.clientX; lastY=e.clientY;
+function createCube() {
+  // cube data (each face 2 triangles, with normals and uvs)
+  const positions = [
+    // +X
+    1, -1, -1,  1, -1,  1,  1,  1,  1,   1,  1, -1,
+    // -X
+   -1, -1,  1, -1, -1, -1, -1,  1, -1,  -1,  1,  1,
+    // +Y
+   -1, 1, -1,   1, 1, -1,   1, 1,  1,  -1, 1,  1,
+    // -Y
+   -1, -1,  1,   1, -1,  1,   1, -1, -1, -1, -1, -1,
+    // +Z
+   -1, -1, 1,   -1,  1, 1,    1,  1, 1,    1, -1, 1,
+    // -Z
+    1, -1, -1,    1,  1, -1,   -1, 1, -1,   -1,-1,-1,
+  ];
+  const normals = [
+    // +X
+    1,0,0, 1,0,0, 1,0,0, 1,0,0,
+    // -X
+   -1,0,0,-1,0,0,-1,0,0,-1,0,0,
+    // +Y
+    0,1,0, 0,1,0, 0,1,0, 0,1,0,
+    // -Y
+    0,-1,0,0,-1,0,0,-1,0,0,-1,0,
+    // +Z
+    0,0,1,0,0,1,0,0,1,0,0,1,
+    // -Z
+    0,0,-1,0,0,-1,0,0,-1,0,0,-1,
+  ];
+  const uvs = [
+    0,0, 1,0, 1,1, 0,1,
+    0,0, 1,0, 1,1, 0,1,
+    0,0, 1,0, 1,1, 0,1,
+    0,0, 1,0, 1,1, 0,1,
+    0,0, 1,0, 1,1, 0,1,
+    0,0, 1,0, 1,1, 0,1,
+  ];
+  const indices = [];
+  for (let i=0;i<6;i++){
+    const offset = i*4;
+    indices.push(offset, offset+1, offset+2, offset, offset+2, offset+3);
   }
-});
-canvas.addEventListener("wheel", e=>{
-  camDistance += e.deltaY*0.01;
-  if(camDistance<1) camDistance=1;
-});
 
-// Touch controls
-let touchStartX=0,touchStartY=0;
-canvas.addEventListener("touchstart", e=>{
-  if(e.touches.length===1){
-    touchStartX=e.touches[0].clientX;
-    touchStartY=e.touches[0].clientY;
-  }
-});
-canvas.addEventListener("touchmove", e=>{
-  if(e.touches.length===1){
-    camAngleY += (e.touches[0].clientX-touchStartX)*0.01;
-    camAngleX += (e.touches[0].clientY-touchStartY)*0.01;
-    touchStartX=e.touches[0].clientX;
-    touchStartY=e.touches[0].clientY;
-  }
-});
+  // create buffers
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
 
-// Animation
-function animate() {
-  gl.clearColor(0,0,0,1);
-  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  // position buffer (location=0)
+  const posBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
 
-  const model = multiply(rotateY(Date.now()*0.001), rotateX(Date.now()*0.0007));
+  // normal buffer (location=1)
+  const nBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, nBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
 
-  // Camera orbit
-  const eyeX = camDistance*Math.sin(camAngleY)*Math.cos(camAngleX);
-  const eyeY = camDistance*Math.sin(camAngleX);
-  const eyeZ = camDistance*Math.cos(camAngleY)*Math.cos(camAngleX);
-  const view = lookAt([eyeX,eyeY,eyeZ],[0,0,0],[0,1,0]);
+  // uv buffer (location=2)
+  const uvBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, uvBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(uvs), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(2);
+  gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
 
-  gl.uniformMatrix4fv(uModel,false,model);
-  gl.uniformMatrix4fv(uView,false,view);
-  gl.uniformMatrix4fv(uProjection,false,projection);
-  gl.uniform3fv(uColor,[0.2,0.7,1.0]);
+  // index buffer
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
 
-  gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
-  requestAnimationFrame(animate);
+  gl.bindVertexArray(null);
+
+  return { vao, indexCount: indices.length };
 }
-animate();
 
-// LookAt matrix
-function lookAt(eye,center,up){
-  const [ex,ey,ez]=eye,[cx,cy,cz]=center,[ux,uy,uz]=up;
-  let zx=ex-cx,zy=ey-cy,zz=ez-cz;
-  const zn=1/Math.hypot(zx,zy,zz); zx*=zn;zy*=zn;zz*=zn;
-  let xx=uy*zz-uz*zy,xy=uz*zx-ux*zz,xz=ux*zy-uy*zx;
-  const xn=1/Math.hypot(xx,xy,xz); xx*=xn;xy*=xn;xz*=xn;
-  let yx=zy*xz-zz*xy,yy=zz*xx-zx*xz,yz=zx*xy-zy*xx;
-  const out=new Float32Array(16);
-  out.set([xx,yx,zx,0,xy,yy,zy,0,xz,yz,zz,0,0,0,0,1]);
-  out[12]=-(xx*ex+xy*ey+xz*ez);
-  out[13]=-(yx*ex+yy*ey+yz*ez);
-  out[14]=-(zx*ex+zy*ey+zz*ez);
-  return out;
+// --- create checkerboard texture (so file is self-contained) ---
+function createCheckerTexture(size=256, squares=8) {
+  const off = document.createElement('canvas');
+  off.width = off.height = size;
+  const ctx = off.getContext('2d');
+  const sq = size / squares;
+  for (let y=0; y<squares; y++){
+    for (let x=0; x<squares; x++){
+      ctx.fillStyle = ((x+y)%2===0) ? '#eeeeee' : '#333399';
+      ctx.fillRect(x*sq, y*sq, sq, sq);
+    }
+  }
+  // add subtle variation (circle)
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.beginPath(); ctx.arc(size*0.75, size*0.25, size*0.18,0,Math.PI*2); ctx.fill();
+  return off;
 }
+
+const texture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, texture);
+const img = createCheckerTexture(512, 16);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+gl.generateMipmap(gl.TEXTURE_2D);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+gl.bindTexture(gl.TEXTURE_2D, null);
+
+// --- uniform locations ---
+const loc = {
+  uModel: gl.getUniformLocation(program, 'uModel'),
+  uView: gl.getUniformLocation(program, 'uView'),
+  uProj: gl.getUniformLocation(program, 'uProj'),
+  uNormalMat: gl.getUniformLocation(program, 'uNormalMat'),
+  uLightPos: gl.getUniformLocation(program, 'uLightPos'),
+  uViewPos: gl.getUniformLocation(program, 'uViewPos'),
+  uAmbientColor: gl.getUniformLocation(program, 'uAmbientColor'),
+  uSpecularColor: gl.getUniformLocation(program, 'uSpecularColor'),
+  uShininess: gl.getUniformLocation(program, 'uShininess'),
+  uAlbedoMap: gl.getUniformLocation(program, 'uAlbedoMap'),
+  uUseTexture: gl.getUniformLocation(program, 'uUseTexture'),
+  uBaseColor: gl.getUniformLocation(program, 'uBaseColor'),
+};
+
+// --- camera & controls (simple orbit) ---
+let cameraRadius = 6;
+let cameraPhi = Math.PI/4;    // vertical
+let cameraTheta = Math.PI/4;  // horizontal
+let isDown = false;
+let lastX=0, lastY=0;
+
+canvas.addEventListener('pointerdown', (e)=>{
+  isDown = true; lastX = e.clientX; lastY = e.clientY;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointerup', (e)=> { isDown=false; canvas.releasePointerCapture(e.pointerId); });
+canvas.addEventListener('pointermove', (e)=>{
+  if (!isDown) return;
+  const dx = (e.clientX - lastX);
+  const dy = (e.clientY - lastY);
+  lastX = e.clientX; lastY = e.clientY;
+  cameraTheta += dx * 0.01;
+  cameraPhi = Math.min(Math.max(0.05, cameraPhi - dy*0.01), Math.PI-0.05);
+});
+canvas.addEventListener('wheel', (e)=>{
+  e.preventDefault();
+  cameraRadius += e.deltaY * 0.01;
+  cameraRadius = Math.max(2.0, Math.min(20.0, cameraRadius));
+}, { passive:false });
+
+// --- matrices ---
+const model = mat4.create();
+const view = mat4.create();
+const proj = mat4.create();
+const normalMat3 = mat4.create(); // will convert to mat3
+
+function updateCameraMatrix() {
+  const eye = [
+    cameraRadius * Math.sin(cameraPhi) * Math.cos(cameraTheta),
+    cameraRadius * Math.cos(cameraPhi),
+    cameraRadius * Math.sin(cameraPhi) * Math.sin(cameraTheta)
+  ];
+  mat4.lookAt(view, eye, [0,0,0], [0,1,0]);
+  const aspect = canvas.width / canvas.height;
+  mat4.perspective(proj, Math.PI/4, aspect, 0.1, 100.0);
+  return eye;
+}
+
+// --- render loop state ---
+let rotation = 0;
+const lightPos = [5,5,5];
+const baseColor = [1.0, 0.8, 0.6];
+
+gl.useProgram(program);
+gl.uniform1i(loc.uAlbedoMap, 0); // texture unit 0
+
+function render() {
+  rotation += 0.01;
+  mat4.identity(model);
+  mat4.rotateY(model, model, rotation);
+  mat4.rotateX(model, model, rotation*0.5);
+
+  const eye = updateCameraMatrix();
+
+  // normal matrix: inverse-transpose of model (mat3)
+  const normalMat = mat4.create();
+  mat4.invert(normalMat, model);
+  mat4.transpose(normalMat, normalMat);
+  // convert mat4 to mat3 by taking upper-left 3x3
+  const nm3 = [
+    normalMat[0], normalMat[1], normalMat[2],
+    normalMat[4], normalMat[5], normalMat[6],
+    normalMat[8], normalMat[9], normalMat[10]
+  ];
+
+  // set viewport & clear
+  gl.viewport(0,0,canvas.width, canvas.height);
+  gl.clearColor(0.12, 0.12, 0.13, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  // set uniforms
+  gl.uniformMatrix4fv(loc.uModel, false, model);
+  gl.uniformMatrix4fv(loc.uView, false, view);
+  gl.uniformMatrix4fv(loc.uProj, false, proj);
+  gl.uniformMatrix3fv(loc.uNormalMat, false, nm3);
+
+  gl.uniform3fv(loc.uLightPos, lightPos);
+  gl.uniform3fv(loc.uViewPos, eye);
+  gl.uniform3fv(loc.uAmbientColor, [1.0,1.0,1.0]);
+  gl.uniform3fv(loc.uSpecularColor, [1.0,1.0,1.0]);
+  gl.uniform1f(loc.uShininess, 64.0);
+  gl.uniform1f(loc.uUseTexture, 1.0);
+  gl.uniform3fv(loc.uBaseColor, baseColor);
+
+  // bind texture
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  // bind VAO + draw
+  gl.bindVertexArray(cube.vao);
+  gl.drawElements(gl.TRIANGLES, cube.indexCount, gl.UNSIGNED_SHORT, 0);
+  gl.bindVertexArray(null);
+
+  requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+
 </script>
 </body>
 </html>
