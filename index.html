@@ -1,38 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>PixiJS Image Editor</title>
-  <style>body{margin:0}</style>
-</head>
-<body>
+<canvas id="app" width="500" height="500"></canvas>
 <script type="module">
-import * as PIXI from "https://cdn.skypack.dev/pixi.js";
+  import { Scene, Camera, Renderer, Mesh } from "./src/index.js";
 
-// Buat aplikasi PIXI
-const app = new PIXI.Application({ 
-  width: window.innerWidth, 
-  height: window.innerHeight, 
-  backgroundColor: 0x222222 
-});
-document.body.appendChild(app.view);
+  const canvas = document.getElementById("app");
+  const renderer = new Renderer(canvas);
+  renderer.setClearColor(0.1, 0.1, 0.1, 1);
 
-// Load gambar
-const texture = PIXI.Texture.from("https://picsum.photos/600/400");
-const sprite = new PIXI.Sprite(texture);
-sprite.anchor.set(0.5);
-sprite.x = app.renderer.width / 2;
-sprite.y = app.renderer.height / 2;
-app.stage.addChild(sprite);
+  const scene = new Scene();
+  const camera = new Camera();
 
-// Tambah filter (contoh: blur)
-const blurFilter = new PIXI.filters.BlurFilter();
-sprite.filters = [blurFilter];
+  const triangle = new Mesh(renderer.gl);
+  triangle.setPosition(0.2, 0.0, 0.0);  // geser ke kanan
+  triangle.setScale(1.5, 1.5, 1.0);     // perbesar
+  scene.add(triangle);
 
-// Animasi filter
-app.ticker.add(() => {
-  blurFilter.blur = 5 + Math.sin(Date.now() / 500) * 5;
-});
+  function loop() {
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+  loop();
 </script>
-</body>
-</html>
