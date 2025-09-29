@@ -1,411 +1,193 @@
-<!doctype html>
-<html lang="id">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>Lantai Keramik Putih + Cube 3D (WebGL murni)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    html,body { height:100%; margin:0; background:#222; }
-    canvas { display:block; width:100%; height:100vh; }
-    #info {
-      position: absolute; left:12px; top:12px; color:#fff; font-family:monospace;
-      background: rgba(0,0,0,0.3); padding:8px 10px; border-radius:6px;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Lantai Keramik Putih + Cube Berputar</title>
+<style>
+  body { margin:0; overflow:hidden; background:#000; }
+  canvas { display:block; width:100vw; height:100vh; }
+</style>
 </head>
 <body>
-<div id="info">WebGL - Keramik Putih + Cube (tanpa library)</div>
 <canvas id="glcanvas"></canvas>
 
+<script src="https://cdn.jsdelivr.net/npm/gl-matrix@3.4.3/gl-matrix-min.js"></script>
 <script>
-// ---------- utility matrix helpers (minimal) ----------
-function degToRad(d){ return d * Math.PI / 180; }
+const canvas = document.getElementById("glcanvas");
+const gl = canvas.getContext("webgl");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-function createIdentity(){
-  return [1,0,0,0,
-          0,1,0,0,
-          0,0,1,0,
-          0,0,0,1];
-}
-
-function multiplyMat4(a,b){
-  const out = new Array(16);
-  for(let i=0;i<4;i++){
-    for(let j=0;j<4;j++){
-      let s=0;
-      for(let k=0;k<4;k++){
-        s += a[k*4 + j] * b[i*4 + k];
-      }
-      out[i*4 + j] = s;
-    }
-  }
-  return out;
-}
-
-function perspective(fovy, aspect, near, far){
-  const f = 1.0 / Math.tan(fovy/2);
-  const nf = 1/(near - far);
-  const out = new Array(16).fill(0);
-  out[0] = f / aspect;
-  out[5] = f;
-  out[10] = (far + near) * nf;
-  out[11] = -1;
-  out[14] = (2*far*near) * nf;
-  return out;
-}
-
-function translate(m, v){
-  const [x,y,z] = v;
-  const out = m.slice();
-  out[12] = m[0]*x + m[4]*y + m[8]*z + m[12];
-  out[13] = m[1]*x + m[5]*y + m[9]*z + m[13];
-  out[14] = m[2]*x + m[6]*y + m[10]*z + m[14];
-  out[15] = m[3]*x + m[7]*y + m[11]*z + m[15];
-  return out;
-}
-
-function rotateX(m, rad){
-  const c=Math.cos(rad), s=Math.sin(rad);
-  const r = [1,0,0,0, 0,c,s,0, 0,-s,c,0, 0,0,0,1];
-  return multiplyMat4(r, m);
-}
-
-function rotateY(m, rad){
-  const c=Math.cos(rad), s=Math.sin(rad);
-  const r = [c,0,-s,0, 0,1,0,0, s,0,c,0, 0,0,0,1];
-  return multiplyMat4(r, m);
-}
-
-function scale(m, v){
-  const [x,y,z] = v;
-  const out = m.slice();
-  out[0] *= x; out[1]*=x; out[2]*=x; out[3]*=x;
-  out[4] *= y; out[5]*=y; out[6]*=y; out[7]*=y;
-  out[8] *= z; out[9]*=z; out[10]*=z; out[11]*=z;
-  return out;
-}
-
-// ---------- WebGL setup ----------
-const canvas = document.getElementById('glcanvas');
-const gl = canvas.getContext('webgl', {antialias:true});
-if(!gl){ alert('WebGL tidak tersedia'); throw new Error('No WebGL'); }
-
-function resizeCanvas(){
-  const dpr = window.devicePixelRatio || 1;
-  const w = Math.floor(canvas.clientWidth * dpr);
-  const h = Math.floor(canvas.clientHeight * dpr);
-  if(canvas.width !== w || canvas.height !== h){
-    canvas.width = w; canvas.height = h;
-    gl.viewport(0,0,w,h);
-  }
-}
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
-
-// ---------- shaders ----------
-// Vertex shader (shared)
+// ==================== SHADER ====================
 const vsSource = `
 attribute vec3 aPosition;
-attribute vec3 aNormal;
 attribute vec2 aUV;
-
-uniform mat4 uModel;
-uniform mat4 uView;
-uniform mat4 uProj;
-
-varying vec3 vNormal;
-varying vec3 vWorldPos;
+uniform mat4 uMVP;
 varying vec2 vUV;
-
-void main(){
-  vec4 worldPos = uModel * vec4(aPosition, 1.0);
-  vWorldPos = worldPos.xyz;
-  vNormal = mat3(uModel) * aNormal;
-  vUV = aUV;
-  gl_Position = uProj * uView * worldPos;
+void main() {
+  vUV = aUV * 50.0; // ulang tile
+  gl_Position = uMVP * vec4(aPosition, 1.0);
 }
 `;
 
-// Fragment shader for both objects (floor uses uv to produce checker)
 const fsSource = `
 precision mediump float;
-varying vec3 vNormal;
-varying vec3 vWorldPos;
 varying vec2 vUV;
+void main() {
+  vec2 uv = fract(vUV);
+  float lineX = step(0.98, uv.x);
+  float lineY = step(0.98, uv.y);
+  float line = max(lineX, lineY);
 
-uniform vec3 uLightDir;
-uniform vec3 uLightColor;
-uniform vec3 uAmbient;
-uniform vec3 uBaseColor;
-uniform float uCheckerScale;
-uniform int uIsFloor; // 1 floor, 0 others
-
-void main(){
-  // basic normalisation
-  vec3 N = normalize(vNormal);
-  vec3 L = normalize(uLightDir);
-
-  float diff = max(dot(N, L), 0.0);
-
-  vec3 base = uBaseColor;
-
-  if(uIsFloor == 1){
-    // generate tile pattern from UV: white tiles + thin grout (nat)
-    vec2 st = vUV * uCheckerScale;
-    vec2 f = fract(st);
-    // distance to nearest grid line
-    float lineWidth = 0.03; // adjust nat thickness
-    float ax = smoothstep(0.0, lineWidth, f.x) * (1.0 - smoothstep(1.0-lineWidth, 1.0, f.x));
-    float ay = smoothstep(0.0, lineWidth, f.y) * (1.0 - smoothstep(1.0-lineWidth, 1.0, f.y));
-    // probability of being line: combine both axes
-    float line = 1.0 - min(1.0, ax + ay);
-    // tile brightness variation (slight)
-    float tileNoise = 0.97 + 0.06 * sin((st.x + st.y) * 12.9898) * 0.5;
-    vec3 tileColor = vec3(1.0, 1.0, 1.0) * tileNoise;
-    vec3 groutColor = vec3(0.78, 0.78, 0.78); // abu nat
-    base = mix(groutColor, tileColor, line);
-  }
-
-  // simple ambient + diffuse lighting
-  vec3 color = uAmbient * base + diff * uLightColor * base;
-
-  // slight fresnel/specular for glossy ceramic/cube
-  float spec = pow(max(dot(reflect(-L, N), normalize(-vWorldPos)), 0.0), 16.0);
-  color += vec3(0.15) * spec;
-
-  gl_FragColor = vec4(color, 1.0);
+  vec3 tileColor = vec3(1.0);  // putih
+  vec3 lineColor = vec3(0.7);  // abu
+  vec3 baseColor = mix(tileColor, lineColor, line);
+  gl_FragColor = vec4(baseColor, 1.0);
 }
 `;
 
-// ---------- compile shaders ----------
-function compileShader(src, type){
-  const s = gl.createShader(type);
-  gl.shaderSource(s, src);
-  gl.compileShader(s);
-  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
-    console.error(gl.getShaderInfoLog(s));
-    throw new Error('Shader compile error');
+function createShader(type, source) {
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.error(gl.getShaderInfoLog(shader));
   }
-  return s;
+  return shader;
 }
-function createProgram(vs, fs){
-  const p = gl.createProgram();
-  gl.attachShader(p, compileShader(vs, gl.VERTEX_SHADER));
-  gl.attachShader(p, compileShader(fs, gl.FRAGMENT_SHADER));
-  gl.linkProgram(p);
-  if(!gl.getProgramParameter(p, gl.LINK_STATUS)){
-    console.error(gl.getProgramInfoLog(p));
-    throw new Error('Program link error');
-  }
-  return p;
-}
-
-const program = createProgram(vsSource, fsSource);
+const vs = createShader(gl.VERTEX_SHADER, vsSource);
+const fs = createShader(gl.FRAGMENT_SHADER, fsSource);
+const program = gl.createProgram();
+gl.attachShader(program, vs);
+gl.attachShader(program, fs);
+gl.linkProgram(program);
 gl.useProgram(program);
 
-// ---------- attribute/uniform locations ----------
-const attribs = {
-  pos: gl.getAttribLocation(program, 'aPosition'),
-  normal: gl.getAttribLocation(program, 'aNormal'),
-  uv: gl.getAttribLocation(program, 'aUV')
-};
-const uniforms = {
-  uModel: gl.getUniformLocation(program, 'uModel'),
-  uView: gl.getUniformLocation(program, 'uView'),
-  uProj: gl.getUniformLocation(program, 'uProj'),
-  uLightDir: gl.getUniformLocation(program, 'uLightDir'),
-  uLightColor: gl.getUniformLocation(program, 'uLightColor'),
-  uAmbient: gl.getUniformLocation(program, 'uAmbient'),
-  uBaseColor: gl.getUniformLocation(program, 'uBaseColor'),
-  uCheckerScale: gl.getUniformLocation(program, 'uCheckerScale'),
-  uIsFloor: gl.getUniformLocation(program, 'uIsFloor')
-};
+// ==================== GEOMETRI ====================
+function makePlane(size=20) {
+  return {
+    pos: new Float32Array([
+      -size,0,-size,   size,0,-size,   size,0, size,
+      -size,0,-size,   size,0, size,  -size,0, size
+    ]),
+    uv: new Float32Array([
+      0,0, 1,0, 1,1,
+      0,0, 1,1, 0,1
+    ])
+  };
+}
 
-// ---------- buffer helpers ----------
-function createBuffer(data, itemSize, attribLocation, usage=gl.STATIC_DRAW){
-  const buf = gl.createBuffer();
+function makeCube(size=1) {
+  let s = size/2;
+  let positions = [
+    -s,-s, s,  s,-s, s,  s, s, s,  -s, s, s,  // depan
+    -s,-s,-s, -s, s,-s,  s, s,-s,   s,-s,-s,  // belakang
+    -s, s,-s, -s, s, s,  s, s, s,   s, s,-s,  // atas
+    -s,-s,-s,  s,-s,-s,  s,-s, s,  -s,-s, s,  // bawah
+     s,-s,-s,  s, s,-s,  s, s, s,   s,-s, s,  // kanan
+    -s,-s,-s, -s,-s, s, -s, s, s,  -s, s,-s   // kiri
+  ];
+  let uv = new Array(positions.length/3*2).fill(0);
+  let indices = [];
+  for (let i=0;i<6;i++) {
+    let base = i*4;
+    indices.push(base,base+1,base+2, base,base+2,base+3);
+  }
+  return {pos:new Float32Array(positions), uv:new Float32Array(uv), indices:new Uint16Array(indices)};
+}
+
+// ==================== BUFFER ====================
+function createBuffer(data, loc, size) {
+  let buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), usage);
-  if(attribLocation >= 0){
-    gl.enableVertexAttribArray(attribLocation);
-    gl.vertexAttribPointer(attribLocation, itemSize, gl.FLOAT, false, 0, 0);
-  }
-  return buf;
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
 }
 
-// ---------- geometry: cube ----------
-function makeCube(size=1){
-  const s = size/2;
-  const positions = [
-    // front
-    -s,-s, s,  s,-s, s,  s, s, s,  -s, s, s,
-    // back
-    s,-s,-s,  -s,-s,-s, -s,s,-s,  s,s,-s,
-    // left
-    -s,-s,-s, -s,-s, s, -s,s, s, -s,s,-s,
-    // right
-    s,-s, s, s,-s,-s, s,s,-s, s,s,s,
-    // top
-    -s,s, s,  s,s, s,  s,s,-s,  -s,s,-s,
-    // bottom
-    -s,-s,-s,  s,-s,-s,  s,-s, s, -s,-s, s
-  ];
-  const normals = [
-    // front
-    0,0,1, 0,0,1, 0,0,1, 0,0,1,
-    // back
-    0,0,-1, 0,0,-1, 0,0,-1, 0,0,-1,
-    // left
-    -1,0,0, -1,0,0, -1,0,0, -1,0,0,
-    // right
-    1,0,0, 1,0,0, 1,0,0, 1,0,0,
-    // top
-    0,1,0, 0,1,0, 0,1,0, 0,1,0,
-    // bottom
-    0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0
-  ];
-  const uvs = [
-    // each face quad gets simple uvs
-    0,0, 1,0, 1,1, 0,1,
-    0,0, 1,0, 1,1, 0,1,
-    0,0, 1,0, 1,1, 0,1,
-    0,0, 1,0, 1,1, 0,1,
-    0,0, 1,0, 1,1, 0,1,
-    0,0, 1,0, 1,1, 0,1
-  ];
-  const indices = [];
-  for(let f=0; f<6; f++){
-    const base = f*4;
-    indices.push(base, base+1, base+2, base, base+2, base+3);
-  }
-  return {positions, normals, uvs, indices};
-}
+const aPos = gl.getAttribLocation(program, "aPosition");
+const aUV  = gl.getAttribLocation(program, "aUV");
+const uMVP = gl.getUniformLocation(program, "uMVP");
 
-// ---------- geometry: floor (big plane) ----------
-function makeFloor(size=20, subdiv=1){
-  // simple plane with UVs repeated
-  const half = size/2;
-  const positions = [
-    -half, 0, -half,
-     half, 0, -half,
-     half, 0,  half,
-    -half, 0,  half
-  ];
-  const normals = [0,1,0, 0,1,0, 0,1,0, 0,1,0];
-  const uvs = [0,0, size,0, size,size, 0,size]; // uv scaled so shader can tile
-  const indices = [0,1,2, 0,2,3];
-  return {positions, normals, uvs, indices};
-}
+let plane = makePlane();
+let planeVAO = gl.createVertexArray();
+gl.bindVertexArray(planeVAO);
+createBuffer(plane.pos, aPos, 3);
+createBuffer(plane.uv, aUV, 2);
 
-// ---------- create GPU buffers ----------
-function createVAO(geom){
-  const vao = {};
-  vao.posBuf = createBuffer(geom.positions, 3, attribs.pos);
-  vao.normalBuf = createBuffer(geom.normals, 3, attribs.normal);
-  vao.uvBuf = createBuffer(geom.uvs, 2, attribs.uv);
-  vao.indexBuf = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vao.indexBuf);
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(geom.indices), gl.STATIC_DRAW);
-  vao.indexCount = geom.indices.length;
-  return vao;
-}
+let cube = makeCube(2);
+let cubeVAO = gl.createVertexArray();
+gl.bindVertexArray(cubeVAO);
+createBuffer(cube.pos, aPos, 3);
+createBuffer(cube.uv, aUV, 2);
+let ibo = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, cube.indices, gl.STATIC_DRAW);
 
-const cubeGeom = makeCube(1.5);
-const floorGeom = makeFloor(30,1);
+// ==================== CAMERA CONTROL ====================
+let angleX=0, angleY=0;
+let dragging=false,lastX,lastY;
+canvas.addEventListener("mousedown",e=>{
+  dragging=true;lastX=e.clientX;lastY=e.clientY;
+});
+canvas.addEventListener("mouseup",()=>dragging=false);
+canvas.addEventListener("mousemove",e=>{
+  if(!dragging)return;
+  let dx=e.clientX-lastX, dy=e.clientY-lastY;
+  angleX+=dx*0.01;
+  angleY+=dy*0.01;
+  lastX=e.clientX;lastY=e.clientY;
+});
 
-const cubeVAO = createVAO(cubeGeom);
-const floorVAO = createVAO(floorGeom);
+let camOffsetX=0, camOffsetY=5, camOffsetZ=10;
+document.addEventListener("keydown",e=>{
+  let step=0.5;
+  if(e.key==="ArrowUp")    camOffsetY+=step;
+  if(e.key==="ArrowDown")  camOffsetY-=step;
+  if(e.key==="ArrowLeft")  camOffsetX-=step;
+  if(e.key==="ArrowRight") camOffsetX+=step;
+});
 
-// ---------- enable depth and cull ----------
-gl.enable(gl.DEPTH_TEST);
-gl.enable(gl.CULL_FACE);
-gl.clearColor(0.12, 0.12, 0.12, 1.0);
+// ==================== RENDER LOOP ====================
+function render(){
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.clearColor(0.2,0.2,0.25,1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
 
-// ---------- camera ----------
-const cameraPos = [0, 6, 10];
-const viewMatrix = (() => {
-  // lookAt simple: build view from camera pos looking at origin
-  function lookAt(eye, target, up=[0,1,0]){
-    const z = normalize(subtract(eye, target));
-    const x = normalize(cross(up, z));
-    const y = cross(z, x);
-    return [ x[0], y[0], z[0], 0,
-             x[1], y[1], z[1], 0,
-             x[2], y[2], z[2], 0,
-            -dot(x,eye), -dot(y,eye), -dot(z,eye), 1 ];
-  }
-  return lookAt(cameraPos, [0,0,0]);
-})();
+  let proj=mat4.create();
+  mat4.perspective(proj, Math.PI/3, canvas.width/canvas.height, 0.1, 100.0);
 
-function subtract(a,b){ return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
-function dot(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; }
-function cross(a,b){ return [ a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0] ]; }
-function length(v){ return Math.sqrt(dot(v,v)); }
-function normalize(v){ const L=length(v)||1; return [v[0]/L,v[1]/L,v[2]/L]; }
+  let eye=[camOffsetX+10*Math.sin(angleX), camOffsetY+10*Math.sin(angleY), camOffsetZ+10*Math.cos(angleX)];
+  let view=mat4.create();
+  mat4.lookAt(view, eye, [0,0,0], [0,1,0]);
 
-// ---------- render loop ----------
-let then = 0;
-function render(now){
-  now *= 0.001;
-  const delta = now - then;
-  then = now;
+  let vp=mat4.create();
+  mat4.multiply(vp, proj, view);
 
-  resizeCanvas();
+  // ---- lantai ----
+  let model=mat4.create();
+  let mvp=mat4.create();
+  mat4.multiply(mvp, vp, model);
+  gl.bindVertexArray(planeVAO);
+  gl.uniformMatrix4fv(uMVP,false,mvp);
+  gl.drawArrays(gl.TRIANGLES,0,6);
 
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-  const aspect = canvas.width / canvas.height;
-  const proj = perspective(degToRad(45), aspect, 0.1, 100);
-
-  // common lighting uniforms
-  const lightDir = normalize([0.5, 1.0, 0.3]);
-  gl.uniform3fv(uniforms.uLightDir, lightDir);
-  gl.uniform3fv(uniforms.uLightColor, [1.0,1.0,1.0]);
-  gl.uniform3fv(uniforms.uAmbient, [0.20,0.20,0.20]);
-
-  // set view/proj
-  gl.uniformMatrix4fv(uniforms.uView, false, new Float32Array(viewMatrix));
-  gl.uniformMatrix4fv(uniforms.uProj, false, new Float32Array(proj));
-
-  // ---------- draw floor ----------
-  // model: identity moved slightly down
-  let mfloor = createIdentity();
-  mfloor = translate(mfloor, [0, -0.001, 0]); // small offset to avoid z-fight
-  gl.uniformMatrix4fv(uniforms.uModel, false, new Float32Array(mfloor));
-  gl.uniform3fv(uniforms.uBaseColor, [1.0,1.0,1.0]); // base white
-  gl.uniform1f(uniforms.uCheckerScale, 4.0); // tiles per unit (controls tile size)
-  gl.uniform1i(uniforms.uIsFloor, 1);
-
-  // bind floor buffers (positions/normals/uv already enabled earlier, but need to bind correct buffers)
-  gl.bindBuffer(gl.ARRAY_BUFFER, floorVAO.posBuf); gl.vertexAttribPointer(attribs.pos, 3, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, floorVAO.normalBuf); gl.vertexAttribPointer(attribs.normal, 3, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, floorVAO.uvBuf); gl.vertexAttribPointer(attribs.uv, 2, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, floorVAO.indexBuf);
-  gl.drawElements(gl.TRIANGLES, floorVAO.indexCount, gl.UNSIGNED_SHORT, 0);
-
-  // ---------- draw cube ----------
-  // animate cube floating + rotating
-  const floatY = 1.4 + Math.sin(now * 2.0) * 0.35; // naik turun
-  let mc = createIdentity();
-  mc = translate(mc, [0, floatY, 0]);
-  mc = rotateY(mc, now * 0.9);
-  mc = rotateX(mc, now * 0.6);
-  mc = scale(mc, [1.2,1.2,1.2]);
-  gl.uniformMatrix4fv(uniforms.uModel, false, new Float32Array(mc));
-  gl.uniform3fv(uniforms.uBaseColor, [0.5, 0.8, 0.95]); // cube color
-  gl.uniform1f(uniforms.uCheckerScale, 1.0);
-  gl.uniform1i(uniforms.uIsFloor, 0);
-
-  gl.bindBuffer(gl.ARRAY_BUFFER, cubeVAO.posBuf); gl.vertexAttribPointer(attribs.pos, 3, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, cubeVAO.normalBuf); gl.vertexAttribPointer(attribs.normal, 3, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ARRAY_BUFFER, cubeVAO.uvBuf); gl.vertexAttribPointer(attribs.uv, 2, gl.FLOAT, false, 0, 0);
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVAO.indexBuf);
-  gl.drawElements(gl.TRIANGLES, cubeVAO.indexCount, gl.UNSIGNED_SHORT, 0);
+  // ---- cube (rotasi otomatis) ----
+  model=mat4.create();
+  mat4.translate(model, model, [0,1,0]); // melayang
+  let t = performance.now() * 0.001;
+  mat4.rotateY(model, model, t);       // rotasi Y
+  mat4.rotateX(model, model, t*0.7);   // rotasi X
+  mvp=mat4.create();
+  mat4.multiply(mvp, vp, model);
+  gl.bindVertexArray(cubeVAO);
+  gl.uniformMatrix4fv(uMVP,false,mvp);
+  gl.drawElements(gl.TRIANGLES, cube.indices.length, gl.UNSIGNED_SHORT, 0);
 
   requestAnimationFrame(render);
 }
-requestAnimationFrame(render);
-
+render();
 </script>
 </body>
 </html>
