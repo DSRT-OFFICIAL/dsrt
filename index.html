@@ -1,165 +1,104 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>WebGL2 Glaze - Walking Cube</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-    body { margin:0; overflow:hidden; background:#5e5d5d; font-family:sans-serif; }
-    #info { position:absolute; top:10px; left:10px; color:white; z-index:10; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Solid Cube</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100%;
+      width: 100%;
+      background: #000;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
 </head>
 <body>
-<div id="info">
-    WebGL2 Glaze - Walking Cube + Skeleton<br>
-    Use Arrow keys to move, Shift to run
-</div>
-<canvas id="glcanvas"></canvas>
-<script type="module">
-const canvas = document.getElementById('glcanvas');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-const gl = canvas.getContext('webgl2');
-if(!gl){ alert('WebGL2 not supported'); }
+  <canvas id="cubeCanvas"></canvas>
+  <script>
+    const canvas = document.getElementById("cubeCanvas");
+    const ctx = canvas.getContext("2d");
 
-function compileShader(src,type){
-    const shader=gl.createShader(type);
-    gl.shaderSource(shader,src);
-    gl.compileShader(shader);
-    if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(shader));
-    return shader;
-}
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener("resize", resize);
 
-// Vertex & Fragment Shader
-const vs = `#version 300 es
-precision highp float;
-layout(location=0) in vec3 aPosition;
-layout(location=1) in vec3 aColor;
-uniform mat4 uModel;
-uniform mat4 uView;
-uniform mat4 uProj;
-out vec3 vColor;
-void main(){ gl_Position = uProj*uView*uModel*vec4(aPosition,1.0); vColor=aColor; }`;
+    const size = 100;
+    let vertices = [
+      {x:-1, y:-1, z:-1}, {x: 1, y:-1, z:-1},
+      {x: 1, y: 1, z:-1}, {x:-1, y: 1, z:-1},
+      {x:-1, y:-1, z: 1}, {x: 1, y:-1, z: 1},
+      {x: 1, y: 1, z: 1}, {x:-1, y: 1, z: 1},
+    ];
 
-const fs = `#version 300 es
-precision highp float;
-in vec3 vColor; out vec4 fragColor;
-void main(){ fragColor=vec4(vColor,1.0); }`;
+    // sisi kubus (4 titik per sisi)
+    const faces = [
+      [0,1,2,3], // belakang
+      [4,5,6,7], // depan
+      [0,1,5,4], // bawah
+      [2,3,7,6], // atas
+      [1,2,6,5], // kanan
+      [0,3,7,4], // kiri
+    ];
 
-const program = gl.createProgram();
-gl.attachShader(program,compileShader(vs,gl.VERTEX_SHADER));
-gl.attachShader(program,compileShader(fs,gl.FRAGMENT_SHADER));
-gl.linkProgram(program);
-if(!gl.getProgramParameter(program,gl.LINK_STATUS)) console.error(gl.getProgramInfoLog(program));
-gl.useProgram(program);
+    let angle = 0;
 
-// Simple Cube Data
-const cubeVerts = new Float32Array([
-  -0.5,-0.5,-0.5, 1,0,0, 0.5,-0.5,-0.5, 0,1,0, 0.5,0.5,-0.5, 0,0,1, -0.5,0.5,-0.5,1,1,0,
-  -0.5,-0.5,0.5,1,0,1, 0.5,-0.5,0.5,0,1,1, 0.5,0.5,0.5,1,1,1, -0.5,0.5,0.5,0,0,0
-]);
-const cubeInd = new Uint16Array([
-0,1,2,0,2,3, 1,5,6,1,6,2, 5,4,7,5,7,6, 4,0,3,4,3,7, 3,2,6,3,6,7, 4,5,1,4,1,0
-]);
+    function project3D(point) {
+      // rotasi sederhana
+      let x = point.x * Math.cos(angle) - point.z * Math.sin(angle);
+      let z = point.x * Math.sin(angle) + point.z * Math.cos(angle);
+      let y = point.y;
 
-const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
-const vbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,vbo); gl.bufferData(gl.ARRAY_BUFFER,cubeVerts,gl.STATIC_DRAW);
-const ebo = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ebo); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,cubeInd,gl.STATIC_DRAW);
-gl.vertexAttribPointer(0,3,gl.FLOAT,false,24,0); gl.enableVertexAttribArray(0);
-gl.vertexAttribPointer(1,3,gl.FLOAT,false,24,12); gl.enableVertexAttribArray(1);
-gl.bindVertexArray(null);
+      // proyeksi perspektif
+      let scale = 400 / (z + 4); 
+      return {
+        x: x * size * scale + canvas.width/2,
+        y: y * size * scale + canvas.height/2,
+        z: z
+      };
+    }
 
-// Floor checkerboard
-const floorVerts=[]; const floorColors=[];
-const size=20; const step=1;
-for(let i=-size;i<size;i+=step){
-  for(let j=-size;j<size;j+=step){
-    const y=0;
-    floorVerts.push(i,y,j, i+step,y,j, i+step,y,j+step, i,y,j+step);
-    const c=(i+j)%2===0?1:0; 
-    for(let k=0;k<4;k++) floorColors.push(c,c,c);
-  }
-}
-const floorInd=[];
-for(let i=0;i<floorVerts.length/3;i+=4){
-  floorInd.push(i,i+1,i+2,i,i+2,i+3);
-}
-const floorVao = gl.createVertexArray(); gl.bindVertexArray(floorVao);
-const floorVbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,floorVbo);
-gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(floorVerts.concat(floorColors)),gl.STATIC_DRAW);
-const floorEbo = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,floorEbo);
-gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,new Uint16Array(floorInd),gl.STATIC_DRAW);
-gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0); gl.enableVertexAttribArray(0);
-gl.vertexAttribPointer(1,3,gl.FLOAT,false,0,floorVerts.length*4); gl.enableVertexAttribArray(1);
-gl.bindVertexArray(null);
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-// Matrices
-function identity(){return [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];}
-function perspective(fov,aspect,near,far){
-  const f=1/Math.tan(fov/2), nf=1/(near-far);
-  return [f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,(2*far*near)*nf,0];
-}
-function translate(m,x,y,z){const out=m.slice(); out[12]+=x; out[13]+=y; out[14]+=z; return out;}
-function rotateY(m,rad){const c=Math.cos(rad), s=Math.sin(rad), out=m.slice(); out[0]=c; out[2]=s; out[8]=-s; out[10]=c; return out;}
-function lookAt(eye,target,up=[0,1,0]){
-  const z0=eye[0]-target[0], z1=eye[1]-target[1], z2=eye[2]-target[2];
-  const len=Math.hypot(z0,z1,z2); const zx=z0/len,zy=z1/len,zz=z2/len;
-  const xx=up[1]*zz-up[2]*zy, xy=up[2]*zx-up[0]*zz, xz=up[0]*zy-up[1]*zx;
-  const xl=Math.hypot(xx,xy,xz); const x0=xx/xl,x1=xy/xl,x2=xz/xl;
-  const y0=zy*x2-zz*x1, y1=zz*x0-zx*x2, y2=zx*x1-zy*x0;
-  return [x0,y0,zx,0,x1,y1,zy,0,x2,y2,zz,0,-(x0*eye[0]+x1*eye[1]+x2*eye[2]),-(y0*eye[0]+y1*eye[1]+y2*eye[2]),-(zx*eye[0]+zy*eye[1]+zz*eye[2]),1];
-}
+      let projected = vertices.map(v => project3D(v));
 
-const uModel = gl.getUniformLocation(program,'uModel');
-const uView = gl.getUniformLocation(program,'uView');
-const uProj = gl.getUniformLocation(program,'uProj');
+      // urutkan sisi berdasarkan rata-rata Z (biar sisi belakang tertutup)
+      let sortedFaces = faces.map(face => {
+        let avgZ = face.reduce((sum, idx) => sum + projected[idx].z, 0) / 4;
+        return {face, avgZ};
+      }).sort((a,b) => a.avgZ - b.avgZ);
 
-let cubePos=[0,0.5,0], cubeRot=0;
-let camPos=[0,10,15], camTarget=[0,0,0];
-const speed=5, keys={};
+      sortedFaces.forEach(({face}, i) => {
+        ctx.beginPath();
+        ctx.moveTo(projected[face[0]].x, projected[face[0]].y);
+        face.forEach(idx => ctx.lineTo(projected[idx].x, projected[idx].y));
+        ctx.closePath();
 
-window.addEventListener('keydown',e=>keys[e.code]=true);
-window.addEventListener('keyup',e=>keys[e.code]=false);
+        // shading warna
+        const colors = ["#666", "#888", "#aaa", "#ccc", "#bbb", "#999"];
+        ctx.fillStyle = colors[i % colors.length];
+        ctx.fill();
+        ctx.strokeStyle = "#000";
+        ctx.stroke();
+      });
+    }
 
-function animate(dt=0){
-    dt=0.016;
+    function animate() {
+      angle += 0.01;
+      draw();
+      requestAnimationFrame(animate);
+    }
 
-    // move cube
-    let move=false;
-    if(keys['ArrowUp']) { cubePos[2]-=speed*dt; cubeRot=0; move=true; }
-    if(keys['ArrowDown']) { cubePos[2]+=speed*dt; cubeRot=Math.PI; move=true; }
-    if(keys['ArrowLeft']) { cubePos[0]-=speed*dt; cubeRot=-Math.PI/2; move=true; }
-    if(keys['ArrowRight']) { cubePos[0]+=speed*dt; cubeRot=Math.PI/2; move=true; }
-
-    gl.enable(gl.DEPTH_TEST);
-    gl.clearColor(0.37,0.36,0.36,1);
-    gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-
-    gl.useProgram(program);
-
-    // draw floor
-    gl.bindVertexArray(floorVao);
-    gl.uniformMatrix4fv(uModel,false,new Float32Array(identity()));
-    gl.uniformMatrix4fv(uView,false,new Float32Array(lookAt(camPos,camTarget)));
-    gl.uniformMatrix4fv(uProj,false,new Float32Array(perspective(45*Math.PI/180,canvas.width/canvas.height,0.1,100)));
-    gl.drawElements(gl.TRIANGLES,floorInd.length,gl.UNSIGNED_SHORT,0);
-
-    // draw cube
-    gl.bindVertexArray(vao);
-    let model = translate(identity(),cubePos[0],cubePos[1],cubePos[2]);
-    model = rotateY(model,cubeRot);
-    gl.uniformMatrix4fv(uModel,false,new Float32Array(model));
-    gl.drawElements(gl.TRIANGLES,cubeInd.length,gl.UNSIGNED_SHORT,0);
-
-    requestAnimationFrame(animate);
-}
-animate();
-
-window.addEventListener('resize',()=>{
-    canvas.width=window.innerWidth;
-    canvas.height=window.innerHeight;
-    gl.viewport(0,0,canvas.width,canvas.height);
-});
-</script>
+    animate();
+  </script>
 </body>
 </html>
