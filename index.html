@@ -24,7 +24,7 @@
 const canvas = document.getElementById("cubeCanvas");
 const ctx = canvas.getContext("2d");
 
-const size = 100;
+const size = 100; // skala cube
 const vertices = [
   [-1, -1, -1], [1, -1, -1],
   [1,  1, -1], [-1, 1, -1],
@@ -70,19 +70,19 @@ function rotate([x, y, z], angle) {
   return [x1, y1, z2];
 }
 
-// Gambar grid lantai rapi
+// Grid lantai penuh di bawah cube
 function drawGrid() {
   ctx.strokeStyle = "#ccc";
   ctx.lineWidth = 1;
 
-  const gridStep = 1;
-  const gridRange = 10;
-  const y = -1; // tinggi lantai
+  const gridStep = 2;    // jarak antar garis kotak
+  const gridRange = 20;  // jangkauan grid
+  const floorY = -2;     // posisi lantai di bawah cube
 
   for (let x = -gridRange; x <= gridRange; x += gridStep) {
     ctx.beginPath();
-    const p1 = project([x, y, -gridRange]);
-    const p2 = project([x, y, gridRange]);
+    const p1 = project([x, floorY, -gridRange]);
+    const p2 = project([x, floorY, gridRange]);
     ctx.moveTo(...p1);
     ctx.lineTo(...p2);
     ctx.stroke();
@@ -90,17 +90,17 @@ function drawGrid() {
 
   for (let z = -gridRange; z <= gridRange; z += gridStep) {
     ctx.beginPath();
-    const p1 = project([-gridRange, y, z]);
-    const p2 = project([gridRange, y, z]);
+    const p1 = project([-gridRange, floorY, z]);
+    const p2 = project([gridRange, floorY, z]);
     ctx.moveTo(...p1);
     ctx.lineTo(...p2);
     ctx.stroke();
   }
 }
 
-// Gambar bayangan cube di lantai
+// Bayangan cube di lantai
 function drawShadow(rotatedVertices) {
-  const shadowY = -1; // lantai
+  const shadowY = -2; // lantai
   const shadowVertices = rotatedVertices.map(([x, y, z]) => [x, shadowY, z]);
 
   ctx.fillStyle = "rgba(0,0,0,0.3)";
@@ -123,12 +123,12 @@ function drawCube() {
 
   const rotated = vertices.map(v => rotate(v, angle));
 
-  // bayangan
+  // Bayangan di lantai
   drawShadow(rotated);
 
   const projected = rotated.map(v => project(v));
 
-  // isi face cube
+  // Cube kuning transparan
   ctx.fillStyle = "#FFD700";
   ctx.globalAlpha = 0.9;
   faces.forEach(face => {
@@ -143,7 +143,7 @@ function drawCube() {
   });
   ctx.globalAlpha = 1.0;
 
-  // garis tepi cube
+  // Garis tepi cube
   ctx.strokeStyle = "black";
   ctx.lineWidth = 1.5;
   edges.forEach(edge => {
