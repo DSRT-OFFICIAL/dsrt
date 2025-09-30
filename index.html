@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Cube Kuning dengan Lantai Grid</title>
+  <title>Cube Kuning dengan Lantai Grid dan Bayangan</title>
   <style>
     body {
       margin: 0;
@@ -18,125 +18,150 @@
   </style>
 </head>
 <body>
-  <canvas id="cubeCanvas" width="800" height="600"></canvas>
+<canvas id="cubeCanvas" width="800" height="600"></canvas>
 
-  <script>
-    const canvas = document.getElementById("cubeCanvas");
-    const ctx = canvas.getContext("2d");
+<script>
+const canvas = document.getElementById("cubeCanvas");
+const ctx = canvas.getContext("2d");
 
-    const size = 100; 
-    const vertices = [
-      [-1, -1, -1], [1, -1, -1],
-      [1,  1, -1], [-1, 1, -1],
-      [-1, -1,  1], [1, -1,  1],
-      [1,  1,  1], [-1, 1,  1]
-    ];
+const size = 100;
+const vertices = [
+  [-1, -1, -1], [1, -1, -1],
+  [1,  1, -1], [-1, 1, -1],
+  [-1, -1,  1], [1, -1,  1],
+  [1,  1,  1], [-1, 1,  1]
+];
 
-    const edges = [
-      [0,1],[1,2],[2,3],[3,0],
-      [4,5],[5,6],[6,7],[7,4],
-      [0,4],[1,5],[2,6],[3,7]
-    ];
+const edges = [
+  [0,1],[1,2],[2,3],[3,0],
+  [4,5],[5,6],[6,7],[7,4],
+  [0,4],[1,5],[2,6],[3,7]
+];
 
-    const faces = [
-      [0,1,2,3],[4,5,6,7],
-      [0,1,5,4],[2,3,7,6],
-      [1,2,6,5],[0,3,7,4]
-    ];
+const faces = [
+  [0,1,2,3],[4,5,6,7],
+  [0,1,5,4],[2,3,7,6],
+  [1,2,6,5],[0,3,7,4]
+];
 
-    let angle = 0;
+let angle = 0;
 
-    function project([x, y, z]) {
-      const fov = 3;
-      const perspective = fov / (fov + z);
-      return [
-        x * size * perspective + canvas.width/2,
-        y * size * perspective + canvas.height/2
-      ];
-    }
+function project([x, y, z]) {
+  const fov = 300;
+  const scale = fov / (fov + z);
+  return [
+    x * size * scale + canvas.width/2,
+    -y * size * scale + canvas.height/2
+  ];
+}
 
-    function rotate([x, y, z], angle) {
-      const cos = Math.cos(angle);
-      const sin = Math.sin(angle);
+function rotate([x, y, z], angle) {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
 
-      let y1 = y * cos - z * sin;
-      let z1 = y * sin + z * cos;
+  // rotasi Y
+  let x1 = x * cos - z * sin;
+  let z1 = x * sin + z * cos;
 
-      let x2 = x * cos - z1 * sin;
-      let z2 = x * sin + z1 * cos;
+  // rotasi X
+  let y1 = y * cos - z1 * sin;
+  let z2 = y * sin + z1 * cos;
 
-      return [x2, y1, z2];
-    }
+  return [x1, y1, z2];
+}
 
-    function drawGrid() {
-      ctx.strokeStyle = "#ccc";
-      ctx.lineWidth = 1;
+// Gambar grid lantai rapi
+function drawGrid() {
+  ctx.strokeStyle = "#ccc";
+  ctx.lineWidth = 1;
 
-      const gridSize = 20;
-      const maxRange = 20;
+  const gridStep = 1;
+  const gridRange = 10;
+  const y = -1; // tinggi lantai
 
-      for (let gx = -maxRange; gx <= maxRange; gx++) {
-        ctx.beginPath();
-        let p1 = project([gx, 2, 10]);
-        let p2 = project([gx, 2, -maxRange]);
-        ctx.moveTo(...p1);
-        ctx.lineTo(...p2);
-        ctx.stroke();
-      }
+  for (let x = -gridRange; x <= gridRange; x += gridStep) {
+    ctx.beginPath();
+    const p1 = project([x, y, -gridRange]);
+    const p2 = project([x, y, gridRange]);
+    ctx.moveTo(...p1);
+    ctx.lineTo(...p2);
+    ctx.stroke();
+  }
 
-      for (let gz = -maxRange; gz <= maxRange; gz++) {
-        ctx.beginPath();
-        let p1 = project([-maxRange, 2, gz]);
-        let p2 = project([maxRange, 2, gz]);
-        ctx.moveTo(...p1);
-        ctx.lineTo(...p2);
-        ctx.stroke();
-      }
-    }
+  for (let z = -gridRange; z <= gridRange; z += gridStep) {
+    ctx.beginPath();
+    const p1 = project([-gridRange, y, z]);
+    const p2 = project([gridRange, y, z]);
+    ctx.moveTo(...p1);
+    ctx.lineTo(...p2);
+    ctx.stroke();
+  }
+}
 
-    function drawCube() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+// Gambar bayangan cube di lantai
+function drawShadow(rotatedVertices) {
+  const shadowY = -1; // lantai
+  const shadowVertices = rotatedVertices.map(([x, y, z]) => [x, shadowY, z]);
 
-      // gambar grid lantai dulu
-      drawGrid();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  faces.forEach(face => {
+    ctx.beginPath();
+    face.forEach((vi, i) => {
+      const [px, py] = project(shadowVertices[vi]);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fill();
+  });
+}
 
-      const rotated = vertices.map(v => rotate(v, angle));
-      const projected = rotated.map(v => project(v));
+function drawCube() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // isi semua face dengan kuning transparan
-      ctx.fillStyle = "#FFD700";
-      ctx.globalAlpha = 0.9;
-      faces.forEach(face => {
-        ctx.beginPath();
-        face.forEach((vi, i) => {
-          const [px, py] = projected[vi];
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        });
-        ctx.closePath();
-        ctx.fill();
-      });
-      ctx.globalAlpha = 1.0;
+  drawGrid();
 
-      // garis tepi
-      ctx.strokeStyle = "black";
-      ctx.lineWidth = 1.5;
-      edges.forEach(edge => {
-        const [p1, p2] = edge.map(i => projected[i]);
-        ctx.beginPath();
-        ctx.moveTo(...p1);
-        ctx.lineTo(...p2);
-        ctx.stroke();
-      });
-    }
+  const rotated = vertices.map(v => rotate(v, angle));
 
-    function animate() {
-      angle += 0.02;
-      drawCube();
-      requestAnimationFrame(animate);
-    }
+  // bayangan
+  drawShadow(rotated);
 
-    animate();
-  </script>
+  const projected = rotated.map(v => project(v));
+
+  // isi face cube
+  ctx.fillStyle = "#FFD700";
+  ctx.globalAlpha = 0.9;
+  faces.forEach(face => {
+    ctx.beginPath();
+    face.forEach((vi, i) => {
+      const [px, py] = projected[vi];
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1.0;
+
+  // garis tepi cube
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 1.5;
+  edges.forEach(edge => {
+    const [p1, p2] = edge.map(i => projected[i]);
+    ctx.beginPath();
+    ctx.moveTo(...p1);
+    ctx.lineTo(...p2);
+    ctx.stroke();
+  });
+}
+
+function animate() {
+  angle += 0.02;
+  drawCube();
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
 </body>
 </html>
