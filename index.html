@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Cube Kuning</title>
+  <title>Cube 3D Manual</title>
   <style>
     body {
       margin: 0;
@@ -23,43 +23,92 @@
   <script>
     const canvas = document.getElementById("cubeCanvas");
     const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
 
-    const size = 100;
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    // titik-titik cube (8 titik)
+    let vertices = [
+      {x:-1, y:-1, z:-1},
+      {x: 1, y:-1, z:-1},
+      {x: 1, y: 1, z:-1},
+      {x:-1, y: 1, z:-1},
+      {x:-1, y:-1, z: 1},
+      {x: 1, y:-1, z: 1},
+      {x: 1, y: 1, z: 1},
+      {x:-1, y: 1, z: 1}
+    ];
 
-    // sisi atas
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - size);
-    ctx.lineTo(cx + size, cy - size/2);
-    ctx.lineTo(cx, cy);
-    ctx.lineTo(cx - size, cy - size/2);
-    ctx.closePath();
-    ctx.fillStyle = "#FFD700"; // kuning terang
-    ctx.fill();
-    ctx.stroke();
+    // sisi-sisi (setiap face pakai 4 titik index)
+    const faces = [
+      [0,1,2,3], // belakang
+      [4,5,6,7], // depan
+      [0,1,5,4], // bawah
+      [2,3,7,6], // atas
+      [1,2,6,5], // kanan
+      [0,3,7,4]  // kiri
+    ];
 
-    // sisi kiri
-    ctx.beginPath();
-    ctx.moveTo(cx - size, cy - size/2);
-    ctx.lineTo(cx, cy);
-    ctx.lineTo(cx, cy + size);
-    ctx.lineTo(cx - size, cy + size/2);
-    ctx.closePath();
-    ctx.fillStyle = "#E6C200"; // kuning medium
-    ctx.fill();
-    ctx.stroke();
+    let angleX = 0;
+    let angleY = 0;
 
-    // sisi kanan
-    ctx.beginPath();
-    ctx.moveTo(cx + size, cy - size/2);
-    ctx.lineTo(cx, cy);
-    ctx.lineTo(cx, cy + size);
-    ctx.lineTo(cx + size, cy + size/2);
-    ctx.closePath();
-    ctx.fillStyle = "#BFA000"; // kuning gelap
-    ctx.fill();
-    ctx.stroke();
+    function project3D(v) {
+      const scale = 200;
+      const dist = 3;
+      const x = v.x;
+      const y = v.y;
+      const z = v.z + dist;
+      return {
+        X: (x / z) * scale + w/2,
+        Y: (y / z) * scale + h/2
+      };
+    }
+
+    function rotate(v, ax, ay) {
+      // rotasi X
+      let cosX = Math.cos(ax), sinX = Math.sin(ax);
+      let y = v.y * cosX - v.z * sinX;
+      let z = v.y * sinX + v.z * cosX;
+
+      // rotasi Y
+      let cosY = Math.cos(ay), sinY = Math.sin(ay);
+      let x = v.x * cosY + z * sinY;
+      z = -v.x * sinY + z * cosY;
+
+      return {x, y, z};
+    }
+
+    function draw() {
+      ctx.clearRect(0,0,w,h);
+
+      // rotasi tiap titik
+      let rotated = vertices.map(v => rotate(v, angleX, angleY));
+
+      // proyeksi
+      let projected = rotated.map(v => project3D(v));
+
+      // gambar face
+      faces.forEach(face => {
+        ctx.beginPath();
+        ctx.moveTo(projected[face[0]].X, projected[face[0]].Y);
+        for (let i=1; i<face.length; i++) {
+          ctx.lineTo(projected[face[i]].X, projected[face[i]].Y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = "#FFD700"; // kuning
+        ctx.strokeStyle = "black";
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+
+    function animate() {
+      angleX += 0.01;
+      angleY += 0.02;
+      draw();
+      requestAnimationFrame(animate);
+    }
+
+    animate();
   </script>
 </body>
 </html>
