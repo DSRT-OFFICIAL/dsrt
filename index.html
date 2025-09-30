@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Cube Kuning Outline</title>
+  <title>Cube Kuning dengan Lantai Grid</title>
   <style>
     body {
       margin: 0;
@@ -18,13 +18,13 @@
   </style>
 </head>
 <body>
-  <canvas id="cubeCanvas" width="500" height="500"></canvas>
+  <canvas id="cubeCanvas" width="800" height="600"></canvas>
 
   <script>
     const canvas = document.getElementById("cubeCanvas");
     const ctx = canvas.getContext("2d");
 
-    const size = 100; // setengah panjang sisi cube
+    const size = 100; 
     const vertices = [
       [-1, -1, -1], [1, -1, -1],
       [1,  1, -1], [-1, 1, -1],
@@ -33,21 +33,20 @@
     ];
 
     const edges = [
-      [0,1],[1,2],[2,3],[3,0], // belakang
-      [4,5],[5,6],[6,7],[7,4], // depan
-      [0,4],[1,5],[2,6],[3,7]  // penghubung
+      [0,1],[1,2],[2,3],[3,0],
+      [4,5],[5,6],[6,7],[7,4],
+      [0,4],[1,5],[2,6],[3,7]
     ];
 
     const faces = [
-      [0,1,2,3], [4,5,6,7], // depan-belakang
-      [0,1,5,4], [2,3,7,6], // kiri-kanan
-      [1,2,6,5], [0,3,7,4]  // atas-bawah
+      [0,1,2,3],[4,5,6,7],
+      [0,1,5,4],[2,3,7,6],
+      [1,2,6,5],[0,3,7,4]
     ];
 
     let angle = 0;
 
     function project([x, y, z]) {
-      const scale = 200;
       const fov = 3;
       const perspective = fov / (fov + z);
       return [
@@ -60,19 +59,46 @@
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
 
-      // rotasi X
       let y1 = y * cos - z * sin;
       let z1 = y * sin + z * cos;
 
-      // rotasi Y
       let x2 = x * cos - z1 * sin;
       let z2 = x * sin + z1 * cos;
 
       return [x2, y1, z2];
     }
 
+    function drawGrid() {
+      ctx.strokeStyle = "#ccc";
+      ctx.lineWidth = 1;
+
+      const gridSize = 20;
+      const maxRange = 20;
+
+      for (let gx = -maxRange; gx <= maxRange; gx++) {
+        ctx.beginPath();
+        let p1 = project([gx, 2, 10]);
+        let p2 = project([gx, 2, -maxRange]);
+        ctx.moveTo(...p1);
+        ctx.lineTo(...p2);
+        ctx.stroke();
+      }
+
+      for (let gz = -maxRange; gz <= maxRange; gz++) {
+        ctx.beginPath();
+        let p1 = project([-maxRange, 2, gz]);
+        let p2 = project([maxRange, 2, gz]);
+        ctx.moveTo(...p1);
+        ctx.lineTo(...p2);
+        ctx.stroke();
+      }
+    }
+
     function drawCube() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // gambar grid lantai dulu
+      drawGrid();
 
       const rotated = vertices.map(v => rotate(v, angle));
       const projected = rotated.map(v => project(v));
@@ -92,7 +118,7 @@
       });
       ctx.globalAlpha = 1.0;
 
-      // gambar semua edge (outline selalu terlihat)
+      // garis tepi
       ctx.strokeStyle = "black";
       ctx.lineWidth = 1.5;
       edges.forEach(edge => {
