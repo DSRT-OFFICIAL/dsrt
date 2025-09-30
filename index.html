@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Solid Cube</title>
+  <title>3D Cube Konsisten</title>
   <style>
     body, html {
       margin: 0;
@@ -31,7 +31,10 @@
     resize();
     window.addEventListener("resize", resize);
 
-    const size = 100;
+    // ukuran konsisten
+    const cubeSize = 150; 
+
+    // titik-titik normalisasi (±1)
     let vertices = [
       {x:-1, y:-1, z:-1}, {x: 1, y:-1, z:-1},
       {x: 1, y: 1, z:-1}, {x:-1, y: 1, z:-1},
@@ -39,7 +42,6 @@
       {x: 1, y: 1, z: 1}, {x:-1, y: 1, z: 1},
     ];
 
-    // sisi kubus (4 titik per sisi)
     const faces = [
       [0,1,2,3], // belakang
       [4,5,6,7], // depan
@@ -52,16 +54,19 @@
     let angle = 0;
 
     function project3D(point) {
-      // rotasi sederhana
+      // rotasi di X dan Y
       let x = point.x * Math.cos(angle) - point.z * Math.sin(angle);
       let z = point.x * Math.sin(angle) + point.z * Math.cos(angle);
-      let y = point.y;
+      let y = point.y * Math.cos(angle/2) - z * Math.sin(angle/2);
+      z = point.y * Math.sin(angle/2) + z * Math.cos(angle/2);
 
-      // proyeksi perspektif
-      let scale = 400 / (z + 4); 
+      // kamera agak jauh
+      let distance = 4;
+      let scale = 500 / (z + distance * 2);
+
       return {
-        x: x * size * scale + canvas.width/2,
-        y: y * size * scale + canvas.height/2,
+        x: x * cubeSize * scale + canvas.width/2,
+        y: y * cubeSize * scale + canvas.height/2,
         z: z
       };
     }
@@ -71,7 +76,7 @@
 
       let projected = vertices.map(v => project3D(v));
 
-      // urutkan sisi berdasarkan rata-rata Z (biar sisi belakang tertutup)
+      // urutkan sisi dari belakang ke depan
       let sortedFaces = faces.map(face => {
         let avgZ = face.reduce((sum, idx) => sum + projected[idx].z, 0) / 4;
         return {face, avgZ};
@@ -83,7 +88,7 @@
         face.forEach(idx => ctx.lineTo(projected[idx].x, projected[idx].y));
         ctx.closePath();
 
-        // shading warna
+        // shading sisi berbeda
         const colors = ["#666", "#888", "#aaa", "#ccc", "#bbb", "#999"];
         ctx.fillStyle = colors[i % colors.length];
         ctx.fill();
@@ -93,7 +98,7 @@
     }
 
     function animate() {
-      angle += 0.01;
+      angle += 0.02;
       draw();
       requestAnimationFrame(animate);
     }
