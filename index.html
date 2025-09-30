@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Cube 3D Manual</title>
+  <title>Cube Isometric</title>
   <style>
     body {
       margin: 0;
@@ -26,7 +26,7 @@
     const w = canvas.width;
     const h = canvas.height;
 
-    // titik-titik cube (8 titik)
+    // titik-titik cube (8 titik, ukuran 2x2x2)
     let vertices = [
       {x:-1, y:-1, z:-1},
       {x: 1, y:-1, z:-1},
@@ -38,7 +38,7 @@
       {x:-1, y: 1, z: 1}
     ];
 
-    // sisi-sisi (setiap face pakai 4 titik index)
+    // sisi-sisi
     const faces = [
       [0,1,2,3], // belakang
       [4,5,6,7], // depan
@@ -51,15 +51,11 @@
     let angleX = 0;
     let angleY = 0;
 
-    function project3D(v) {
-      const scale = 200;
-      const dist = 3;
-      const x = v.x;
-      const y = v.y;
-      const z = v.z + dist;
+    function projectIso(v) {
+      const scale = 100;
       return {
-        X: (x / z) * scale + w/2,
-        Y: (y / z) * scale + h/2
+        X: v.x * scale + w/2,
+        Y: v.y * scale + h/2
       };
     }
 
@@ -80,13 +76,16 @@
     function draw() {
       ctx.clearRect(0,0,w,h);
 
-      // rotasi tiap titik
+      // rotasi titik
       let rotated = vertices.map(v => rotate(v, angleX, angleY));
 
-      // proyeksi
-      let projected = rotated.map(v => project3D(v));
+      // proyeksi ortogonal/isometrik
+      let projected = rotated.map(v => projectIso(v));
 
       // gambar face
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 2;
+      ctx.fillStyle = "#FFD700";
       faces.forEach(face => {
         ctx.beginPath();
         ctx.moveTo(projected[face[0]].X, projected[face[0]].Y);
@@ -94,8 +93,6 @@
           ctx.lineTo(projected[face[i]].X, projected[face[i]].Y);
         }
         ctx.closePath();
-        ctx.fillStyle = "#FFD700"; // kuning
-        ctx.strokeStyle = "black";
         ctx.fill();
         ctx.stroke();
       });
