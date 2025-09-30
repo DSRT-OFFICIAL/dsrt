@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Cube Isometric</title>
+  <title>Cube Kuning Outline</title>
   <style>
     body {
       margin: 0;
@@ -23,85 +23,90 @@
   <script>
     const canvas = document.getElementById("cubeCanvas");
     const ctx = canvas.getContext("2d");
-    const w = canvas.width;
-    const h = canvas.height;
 
-    // titik-titik cube (8 titik, ukuran 2x2x2)
-    let vertices = [
-      {x:-1, y:-1, z:-1},
-      {x: 1, y:-1, z:-1},
-      {x: 1, y: 1, z:-1},
-      {x:-1, y: 1, z:-1},
-      {x:-1, y:-1, z: 1},
-      {x: 1, y:-1, z: 1},
-      {x: 1, y: 1, z: 1},
-      {x:-1, y: 1, z: 1}
+    const size = 100; // setengah panjang sisi cube
+    const vertices = [
+      [-1, -1, -1], [1, -1, -1],
+      [1,  1, -1], [-1, 1, -1],
+      [-1, -1,  1], [1, -1,  1],
+      [1,  1,  1], [-1, 1,  1]
     ];
 
-    // sisi-sisi
+    const edges = [
+      [0,1],[1,2],[2,3],[3,0], // belakang
+      [4,5],[5,6],[6,7],[7,4], // depan
+      [0,4],[1,5],[2,6],[3,7]  // penghubung
+    ];
+
     const faces = [
-      [0,1,2,3], // belakang
-      [4,5,6,7], // depan
-      [0,1,5,4], // bawah
-      [2,3,7,6], // atas
-      [1,2,6,5], // kanan
-      [0,3,7,4]  // kiri
+      [0,1,2,3], [4,5,6,7], // depan-belakang
+      [0,1,5,4], [2,3,7,6], // kiri-kanan
+      [1,2,6,5], [0,3,7,4]  // atas-bawah
     ];
 
-    let angleX = 0;
-    let angleY = 0;
+    let angle = 0;
 
-    function projectIso(v) {
-      const scale = 100;
-      return {
-        X: v.x * scale + w/2,
-        Y: v.y * scale + h/2
-      };
+    function project([x, y, z]) {
+      const scale = 200;
+      const fov = 3;
+      const perspective = fov / (fov + z);
+      return [
+        x * size * perspective + canvas.width/2,
+        y * size * perspective + canvas.height/2
+      ];
     }
 
-    function rotate(v, ax, ay) {
+    function rotate([x, y, z], angle) {
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+
       // rotasi X
-      let cosX = Math.cos(ax), sinX = Math.sin(ax);
-      let y = v.y * cosX - v.z * sinX;
-      let z = v.y * sinX + v.z * cosX;
+      let y1 = y * cos - z * sin;
+      let z1 = y * sin + z * cos;
 
       // rotasi Y
-      let cosY = Math.cos(ay), sinY = Math.sin(ay);
-      let x = v.x * cosY + z * sinY;
-      z = -v.x * sinY + z * cosY;
+      let x2 = x * cos - z1 * sin;
+      let z2 = x * sin + z1 * cos;
 
-      return {x, y, z};
+      return [x2, y1, z2];
     }
 
-    function draw() {
-      ctx.clearRect(0,0,w,h);
+    function drawCube() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // rotasi titik
-      let rotated = vertices.map(v => rotate(v, angleX, angleY));
+      const rotated = vertices.map(v => rotate(v, angle));
+      const projected = rotated.map(v => project(v));
 
-      // proyeksi ortogonal/isometrik
-      let projected = rotated.map(v => projectIso(v));
-
-      // gambar face
-      ctx.strokeStyle = "black";
-      ctx.lineWidth = 2;
+      // isi semua face dengan kuning transparan
       ctx.fillStyle = "#FFD700";
+      ctx.globalAlpha = 0.9;
       faces.forEach(face => {
         ctx.beginPath();
-        ctx.moveTo(projected[face[0]].X, projected[face[0]].Y);
-        for (let i=1; i<face.length; i++) {
-          ctx.lineTo(projected[face[i]].X, projected[face[i]].Y);
-        }
+        face.forEach((vi, i) => {
+          const [px, py] = projected[vi];
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
         ctx.closePath();
         ctx.fill();
+      });
+      ctx.globalAlpha = 1.0;
+
+      // gambar semua edge (outline selalu terlihat)
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 1.5;
+      edges.forEach(edge => {
+        const [p1, p2] = edge.map(i => projected[i]);
+        ctx.beginPath();
+        ctx.moveTo(...p1);
+        ctx.lineTo(...p2);
         ctx.stroke();
       });
     }
 
     function animate() {
-      angleX += 0.01;
-      angleY += 0.02;
-      draw();
+      angle += 0.02;
+      drawCube();
       requestAnimationFrame(animate);
     }
 
