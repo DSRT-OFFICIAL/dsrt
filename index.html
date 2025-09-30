@@ -1,95 +1,113 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kubus 3D</title>
-  <style>
-    body, html {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      width: 100%;
-      background: #000;
-    }
-    canvas {
-      display: block;
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Static 3D Cube (Canvas)</title>
+<style>
+  html,body{height:100%;margin:0;background:#0b0b0b;}
+  canvas{display:block;width:100vw;height:100vh;}
+</style>
 </head>
 <body>
-  <canvas id="canvas"></canvas>
-  <script>
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
 
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    resize();
-    window.addEventListener("resize", resize);
+function fit() {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+}
+fit();
+addEventListener('resize', fit);
 
-    const size = 100;
-    const vertices = [
-      {x:-1,y:-1,z:-1}, {x: 1,y:-1,z:-1},
-      {x: 1,y: 1,z:-1}, {x:-1,y: 1,z:-1},
-      {x:-1,y:-1,z: 1}, {x: 1,y:-1,z: 1},
-      {x: 1,y: 1,z: 1}, {x:-1,y: 1,z: 1}
-    ];
+// Parameters: cube size in pixels (edge length) and offset
+const edge = Math.min(canvas.width, canvas.height) * 0.28; // scalable
+const cx = canvas.width/2;
+const cy = canvas.height/2 - edge*0.08; // slightly up
 
-    const faces = [
-      [0,1,2,3], // belakang
-      [4,5,6,7], // depan
-      [0,1,5,4], // bawah
-      [2,3,7,6], // atas
-      [1,2,6,5], // kanan
-      [0,3,7,4]  // kiri
-    ];
+// Isometric-like offsets to make cube proportions correct
+const isoX = edge * 0.5;   // horizontal projection of depth
+const isoY = edge * 0.28;  // vertical projection of depth (controls angle)
 
-    const colors = ["red","green","blue","yellow","orange","white"];
+// Define the 3 visible faces as polygons (top, left, right)
+const top = [
+  {x: cx - edge/2,        y: cy - edge/2 - isoY},
+  {x: cx + edge/2,        y: cy - edge/2 - isoY},
+  {x: cx + edge/2 - isoX, y: cy - edge/2},
+  {x: cx - edge/2 - isoX, y: cy - edge/2}
+];
 
-    function project(v) {
-      const angleX = 0.6, angleY = 0.8;
-      let x = v.x*Math.cos(angleY) - v.z*Math.sin(angleY);
-      let z = v.x*Math.sin(angleY) + v.z*Math.cos(angleY);
-      let y = v.y*Math.cos(angleX) - z*Math.sin(angleX);
-      z = v.y*Math.sin(angleX) + z*Math.cos(angleX);
+const left = [
+  {x: cx - edge/2 - isoX, y: cy - edge/2},
+  {x: cx - edge/2 - isoX, y: cy + edge/2},
+  {x: cx - edge/2,        y: cy + edge/2 + isoY},
+  {x: cx - edge/2,        y: cy - edge/2}
+];
 
-      const scale = 200 / (z + 5);
-      return {
-        x: x*size*scale + canvas.width/2,
-        y: y*size*scale + canvas.height/2,
-        z: z
-      };
-    }
+const right = [
+  {x: cx + edge/2,        y: cy - edge/2 - isoY},
+  {x: cx + edge/2 - isoX, y: cy - edge/2},
+  {x: cx + edge/2,        y: cy + edge/2 + isoY},
+  {x: cx + edge/2 + isoX, y: cy + edge/2}
+];
 
-    function drawCube() {
-      ctx.clearRect(0,0,canvas.width,canvas.height);
+// simple soft drop shadow beneath cube
+function drawShadow(){
+  const g = ctx.createLinearGradient(cx, cy+edge, cx, cy+edge+edge*0.9);
+  g.addColorStop(0, 'rgba(0,0,0,0.45)');
+  g.addColorStop(1, 'rgba(0,0,0,0.0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  // an approximate elliptical shadow polygon
+  ctx.ellipse(cx, cy + edge*0.82, edge*0.6, edge*0.22, 0, 0, Math.PI*2);
+  ctx.fill();
+}
 
-      const projected = vertices.map(project);
+// draw polygon helper
+function fillPoly(pts, fillStyle, stroke=true) {
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.fillStyle = fillStyle;
+  ctx.fill();
+  if(stroke){
+    ctx.lineWidth = Math.max(1, Math.min(4, edge*0.008));
+    ctx.strokeStyle = '#111';
+    ctx.stroke();
+  }
+}
 
-      // sort by depth
-      const sorted = faces.map((face,i)=>{
-        const avgZ = face.reduce((s,idx)=>s+projected[idx].z,0)/4;
-        return {face, color: colors[i], z: avgZ};
-      }).sort((a,b)=>a.z-b.z);
+// render
+function render(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-      // draw faces
-      sorted.forEach(({face,color})=>{
-        ctx.beginPath();
-        ctx.moveTo(projected[face[0]].x, projected[face[0]].y);
-        face.forEach(idx=>ctx.lineTo(projected[idx].x, projected[idx].y));
-        ctx.closePath();
-        ctx.fillStyle = color;
-        ctx.fill();
-        ctx.strokeStyle = "black";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      });
-    }
+  // optional vignette background like reference
+  const bg = ctx.createRadialGradient(cx, cy - edge*0.6, edge*0.5, cx, cy, Math.max(canvas.width, canvas.height));
+  bg.addColorStop(0, '#222426');
+  bg.addColorStop(1, '#070707');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    drawCube(); // hanya digambar sekali
-  </script>
+  drawShadow();
+
+  // draw faces: top (lighter), left (mid), right (darker)
+  fillPoly(top,   '#dfe1e2'); // top face (light)
+  fillPoly(left,  '#bfc2c4'); // left face (mid)
+  fillPoly(right, '#9ea2a4'); // right face (dark)
+
+  // subtle highlight at top edge
+  ctx.beginPath();
+  ctx.moveTo(top[0].x, top[0].y);
+  ctx.lineTo(top[1].x, top[1].y);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.stroke();
+}
+
+render();
+</script>
 </body>
 </html>
