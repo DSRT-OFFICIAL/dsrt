@@ -1,76 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Cube Kuning</title>
-<style>
-  html,body{height:100%;margin:0;background:#fff;}
-  canvas{display:block;width:100vw;height:100vh;}
-</style>
+  <meta charset="UTF-8">
+  <title>Cube Kuning</title>
+  <style>
+    body {
+      margin: 0;
+      background: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas {
+      background: white;
+    }
+  </style>
 </head>
 <body>
-<canvas id="c"></canvas>
-<script>
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+  <canvas id="cubeCanvas" width="500" height="500"></canvas>
 
-function fit() {
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
-}
-fit();
-addEventListener('resize', fit);
+  <script>
+    const canvas = document.getElementById("cubeCanvas");
+    const ctx = canvas.getContext("2d");
 
-const edge = Math.min(canvas.width, canvas.height) * 0.28;
-const cx = canvas.width/2;
-const cy = canvas.height/2 - edge*0.08;
+    const size = 100;
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
 
-// proyeksi isometrik sederhana
-const isoX = edge * 0.5;
-const isoY = edge * 0.28;
+    // sisi atas
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size);
+    ctx.lineTo(cx + size, cy - size/2);
+    ctx.lineTo(cx, cy);
+    ctx.lineTo(cx - size, cy - size/2);
+    ctx.closePath();
+    ctx.fillStyle = "#FFD700"; // kuning terang
+    ctx.fill();
+    ctx.stroke();
 
-const top = [
-  {x: cx - edge/2,        y: cy - edge/2 - isoY},
-  {x: cx + edge/2,        y: cy - edge/2 - isoY},
-  {x: cx + edge/2 - isoX, y: cy - edge/2},
-  {x: cx - edge/2 - isoX, y: cy - edge/2}
-];
+    // sisi kiri
+    ctx.beginPath();
+    ctx.moveTo(cx - size, cy - size/2);
+    ctx.lineTo(cx, cy);
+    ctx.lineTo(cx, cy + size);
+    ctx.lineTo(cx - size, cy + size/2);
+    ctx.closePath();
+    ctx.fillStyle = "#E6C200"; // kuning medium
+    ctx.fill();
+    ctx.stroke();
 
-const left = [
-  {x: cx - edge/2 - isoX, y: cy - edge/2},
-  {x: cx - edge/2 - isoX, y: cy + edge/2},
-  {x: cx - edge/2,        y: cy + edge/2 + isoY},
-  {x: cx - edge/2,        y: cy - edge/2}
-];
-
-const right = [
-  {x: cx + edge/2,        y: cy - edge/2 - isoY},
-  {x: cx + edge/2 - isoX, y: cy - edge/2},
-  {x: cx + edge/2,        y: cy + edge/2 + isoY},
-  {x: cx + edge/2 + isoX, y: cy + edge/2}
-];
-
-function fillPoly(pts) {
-  ctx.beginPath();
-  ctx.moveTo(pts[0].x, pts[0].y);
-  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-}
-
-function render(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = "#FFD700"; // kuning emas
-  fillPoly(top);
-  fillPoly(left);
-  fillPoly(right);
-}
-
-render();
-</script>
+    // sisi kanan
+    ctx.beginPath();
+    ctx.moveTo(cx + size, cy - size/2);
+    ctx.lineTo(cx, cy);
+    ctx.lineTo(cx, cy + size);
+    ctx.lineTo(cx + size, cy + size/2);
+    ctx.closePath();
+    ctx.fillStyle = "#BFA000"; // kuning gelap
+    ctx.fill();
+    ctx.stroke();
+  </script>
 </body>
 </html>
