@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Static 3D Cube (Canvas)</title>
+<title>Cube Kuning</title>
 <style>
-  html,body{height:100%;margin:0;background:#0b0b0b;}
+  html,body{height:100%;margin:0;background:#fff;}
   canvas{display:block;width:100vw;height:100vh;}
 </style>
 </head>
@@ -22,16 +22,14 @@ function fit() {
 fit();
 addEventListener('resize', fit);
 
-// Parameters: cube size in pixels (edge length) and offset
-const edge = Math.min(canvas.width, canvas.height) * 0.28; // scalable
+const edge = Math.min(canvas.width, canvas.height) * 0.28;
 const cx = canvas.width/2;
-const cy = canvas.height/2 - edge*0.08; // slightly up
+const cy = canvas.height/2 - edge*0.08;
 
-// Isometric-like offsets to make cube proportions correct
-const isoX = edge * 0.5;   // horizontal projection of depth
-const isoY = edge * 0.28;  // vertical projection of depth (controls angle)
+// proyeksi isometrik sederhana
+const isoX = edge * 0.5;
+const isoY = edge * 0.28;
 
-// Define the 3 visible faces as polygons (top, left, right)
 const top = [
   {x: cx - edge/2,        y: cy - edge/2 - isoY},
   {x: cx + edge/2,        y: cy - edge/2 - isoY},
@@ -53,58 +51,23 @@ const right = [
   {x: cx + edge/2 + isoX, y: cy + edge/2}
 ];
 
-// simple soft drop shadow beneath cube
-function drawShadow(){
-  const g = ctx.createLinearGradient(cx, cy+edge, cx, cy+edge+edge*0.9);
-  g.addColorStop(0, 'rgba(0,0,0,0.45)');
-  g.addColorStop(1, 'rgba(0,0,0,0.0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  // an approximate elliptical shadow polygon
-  ctx.ellipse(cx, cy + edge*0.82, edge*0.6, edge*0.22, 0, 0, Math.PI*2);
-  ctx.fill();
-}
-
-// draw polygon helper
-function fillPoly(pts, fillStyle, stroke=true) {
+function fillPoly(pts) {
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
   for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.closePath();
-  ctx.fillStyle = fillStyle;
   ctx.fill();
-  if(stroke){
-    ctx.lineWidth = Math.max(1, Math.min(4, edge*0.008));
-    ctx.strokeStyle = '#111';
-    ctx.stroke();
-  }
+  ctx.strokeStyle = "#000";
+  ctx.lineWidth = 2;
+  ctx.stroke();
 }
 
-// render
 function render(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-
-  // optional vignette background like reference
-  const bg = ctx.createRadialGradient(cx, cy - edge*0.6, edge*0.5, cx, cy, Math.max(canvas.width, canvas.height));
-  bg.addColorStop(0, '#222426');
-  bg.addColorStop(1, '#070707');
-  ctx.fillStyle = bg;
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  drawShadow();
-
-  // draw faces: top (lighter), left (mid), right (darker)
-  fillPoly(top,   '#dfe1e2'); // top face (light)
-  fillPoly(left,  '#bfc2c4'); // left face (mid)
-  fillPoly(right, '#9ea2a4'); // right face (dark)
-
-  // subtle highlight at top edge
-  ctx.beginPath();
-  ctx.moveTo(top[0].x, top[0].y);
-  ctx.lineTo(top[1].x, top[1].y);
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-  ctx.stroke();
+  ctx.fillStyle = "#FFD700"; // kuning emas
+  fillPoly(top);
+  fillPoly(left);
+  fillPoly(right);
 }
 
 render();
