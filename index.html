@@ -3,12 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Cube Konsisten</title>
+  <title>Kubus 3D</title>
   <style>
     body, html {
       margin: 0;
       padding: 0;
-      overflow: hidden;
       height: 100%;
       width: 100%;
       background: #000;
@@ -19,9 +18,9 @@
   </style>
 </head>
 <body>
-  <canvas id="cubeCanvas"></canvas>
+  <canvas id="canvas"></canvas>
   <script>
-    const canvas = document.getElementById("cubeCanvas");
+    const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
 
     function resize() {
@@ -31,79 +30,47 @@
     resize();
     window.addEventListener("resize", resize);
 
-    // ukuran konsisten
-    const cubeSize = 150; 
-
-    // titik-titik normalisasi (±1)
-    let vertices = [
-      {x:-1, y:-1, z:-1}, {x: 1, y:-1, z:-1},
-      {x: 1, y: 1, z:-1}, {x:-1, y: 1, z:-1},
-      {x:-1, y:-1, z: 1}, {x: 1, y:-1, z: 1},
-      {x: 1, y: 1, z: 1}, {x:-1, y: 1, z: 1},
+    const size = 100;
+    const vertices = [
+      {x:-1,y:-1,z:-1}, {x:1,y:-1,z:-1},
+      {x:1,y:1,z:-1},  {x:-1,y:1,z:-1},
+      {x:-1,y:-1,z:1}, {x:1,y:-1,z:1},
+      {x:1,y:1,z:1},   {x:-1,y:1,z:1}
     ];
-
     const faces = [
-      [0,1,2,3], // belakang
-      [4,5,6,7], // depan
-      [0,1,5,4], // bawah
-      [2,3,7,6], // atas
-      [1,2,6,5], // kanan
-      [0,3,7,4], // kiri
+      [0,1,2,3], [4,5,6,7],
+      [0,1,5,4], [2,3,7,6],
+      [1,2,6,5], [0,3,7,4]
     ];
 
-    let angle = 0;
-
-    function project3D(point) {
-      // rotasi di X dan Y
-      let x = point.x * Math.cos(angle) - point.z * Math.sin(angle);
-      let z = point.x * Math.sin(angle) + point.z * Math.cos(angle);
-      let y = point.y * Math.cos(angle/2) - z * Math.sin(angle/2);
-      z = point.y * Math.sin(angle/2) + z * Math.cos(angle/2);
-
-      // kamera agak jauh
-      let distance = 4;
-      let scale = 500 / (z + distance * 2);
-
+    function project(v) {
+      const distance = 4;
+      const scale = size / (v.z + distance);
       return {
-        x: x * cubeSize * scale + canvas.width/2,
-        y: y * cubeSize * scale + canvas.height/2,
-        z: z
+        x: v.x * scale * 100 + canvas.width/2,
+        y: v.y * scale * 100 + canvas.height/2,
+        z: v.z
       };
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function drawCube() {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
 
-      let projected = vertices.map(v => project3D(v));
+      let projected = vertices.map(project);
 
-      // urutkan sisi dari belakang ke depan
-      let sortedFaces = faces.map(face => {
-        let avgZ = face.reduce((sum, idx) => sum + projected[idx].z, 0) / 4;
-        return {face, avgZ};
-      }).sort((a,b) => a.avgZ - b.avgZ);
-
-      sortedFaces.forEach(({face}, i) => {
+      faces.forEach((face,i)=>{
         ctx.beginPath();
         ctx.moveTo(projected[face[0]].x, projected[face[0]].y);
-        face.forEach(idx => ctx.lineTo(projected[idx].x, projected[idx].y));
+        face.forEach(idx=>ctx.lineTo(projected[idx].x, projected[idx].y));
         ctx.closePath();
-
-        // shading sisi berbeda
-        const colors = ["#666", "#888", "#aaa", "#ccc", "#bbb", "#999"];
-        ctx.fillStyle = colors[i % colors.length];
+        ctx.fillStyle = ["#666","#888","#aaa","#bbb","#999","#777"][i%6];
         ctx.fill();
         ctx.strokeStyle = "#000";
         ctx.stroke();
       });
     }
 
-    function animate() {
-      angle += 0.02;
-      draw();
-      requestAnimationFrame(animate);
-    }
-
-    animate();
+    drawCube(); // sekali saja (statis)
   </script>
 </body>
 </html>
